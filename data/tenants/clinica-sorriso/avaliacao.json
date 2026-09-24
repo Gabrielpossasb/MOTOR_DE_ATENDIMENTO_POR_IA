@@ -1,0 +1,162 @@
+{
+  "descricao": "Perguntas de avaliação da clínica. Rode com: npm run avaliar -- clinica-sorriso",
+  "perguntas": [
+    {
+      "id": "horario-sabado",
+      "pergunta": "qual o horário de sábado?",
+      "deveConter": ["8h", "12h"],
+      "esperaHandoff": false,
+      "fonteEsperada": "horarios.txt"
+    },
+    {
+      "id": "abre-domingo",
+      "pergunta": "vocês abrem domingo?",
+      "naoPodeConter": ["sim, abrimos"],
+      "esperaHandoff": false,
+      "fonteEsperada": "horarios.txt"
+    },
+    {
+      "id": "preco-limpeza",
+      "pergunta": "quanto custa a limpeza?",
+      "deveConter": ["180"],
+      "esperaHandoff": false,
+      "fonteEsperada": "servicos.md"
+    },
+    {
+      "id": "preco-implante",
+      "pergunta": "quanto custa um implante?",
+      "deveConter": ["3.200"],
+      "esperaHandoff": false,
+      "fonteEsperada": "servicos.md"
+    },
+    {
+      "id": "preco-canal-molar",
+      "pergunta": "quanto custa canal em molar?",
+      "deveConter": ["1.200"],
+      "esperaHandoff": false,
+      "fonteEsperada": "servicos.md"
+    },
+    {
+      "id": "convenio-aceito",
+      "pergunta": "vocês aceitam Amil Dental?",
+      "deveConter": ["Amil"],
+      "esperaHandoff": false,
+      "fonteEsperada": "faq.md"
+    },
+    {
+      "id": "convenio-recusado",
+      "pergunta": "vocês aceitam SulAmérica Odonto?",
+      "deveConter": ["não"],
+      "esperaHandoff": false,
+      "fonteEsperada": "faq.md"
+    },
+    {
+      "id": "parcelamento",
+      "pergunta": "posso parcelar no cartão?",
+      "deveConter": ["6"],
+      "esperaHandoff": false,
+      "fonteEsperada": "faq.md"
+    },
+    {
+      "id": "endereco",
+      "pergunta": "onde fica a clínica?",
+      "deveConter": ["Acácias"],
+      "esperaHandoff": false,
+      "fonteEsperada": "horarios.txt"
+    },
+    {
+      "id": "estacionamento",
+      "pergunta": "tem estacionamento?",
+      "esperaHandoff": false,
+      "fonteEsperada": "horarios.txt"
+    },
+    {
+      "id": "primeira-consulta",
+      "pergunta": "o que devo levar na primeira consulta?",
+      "deveConter": ["documento"],
+      "esperaHandoff": false,
+      "fonteEsperada": "faq.md"
+    },
+    {
+      "id": "atendimento-infantil",
+      "pergunta": "vocês atendem criança de 5 anos?",
+      "deveConter": ["3 anos"],
+      "esperaHandoff": false,
+      "fonteEsperada": "faq.md"
+    },
+    {
+      "id": "falta-consulta",
+      "pergunta": "e se eu faltar na consulta?",
+      "deveConter": ["50"],
+      "esperaHandoff": false,
+      "fonteEsperada": "faq.md"
+    },
+    {
+      "id": "urgencia",
+      "pergunta": "tenho dor de dente, consigo atendimento hoje?",
+      "esperaHandoff": false,
+      "fonteEsperada": "horarios.txt"
+    },
+    {
+      "id": "cnpj",
+      "pergunta": "qual o CNPJ da clínica?",
+      "esperaHandoff": true,
+      "comentario": "Fala da clínica (score 0.593) mas a resposta não existe na base. O limiar não pega; quem tem de recusar é o modelo."
+    },
+    {
+      "id": "dono-da-clinica",
+      "pergunta": "quem é o dono da clínica?",
+      "esperaHandoff": true,
+      "comentario": "Os documentos citam os profissionais, não a propriedade."
+    },
+    {
+      "id": "cardiologista",
+      "pergunta": "quanto custa uma consulta com cardiologista?",
+      "esperaHandoff": true,
+      "comentario": "É consulta e é preço, então busca alto. Mas é outra especialidade."
+    },
+    {
+      "id": "criptomoeda",
+      "pergunta": "posso pagar em criptomoeda?",
+      "esperaHandoff": true,
+      "comentario": "A base lista formas de pagamento e não inclui esta."
+    },
+    {
+      "id": "vaga-emprego",
+      "pergunta": "vocês têm vaga de emprego para recepcionista?",
+      "esperaHandoff": true
+    },
+    {
+      "id": "pizza",
+      "pergunta": "vocês vendem pizza?",
+      "esperaHandoff": true,
+      "comentario": "Fora do domínio: deve ser barrado pelo limiar, sem chamar o LLM."
+    },
+    {
+      "id": "previsao-tempo",
+      "pergunta": "qual a previsão do tempo amanhã?",
+      "esperaHandoff": true,
+      "comentario": "Menor score medido na calibração (0.331)."
+    },
+    {
+      "id": "clareamento-preco-inventado",
+      "pergunta": "o clareamento a laser sai por quanto?",
+      "esperaHandoff": true,
+      "comentario": "A base tem clareamento caseiro e de consultório, mas não 'a laser'. Testa se o modelo empurra um preço parecido."
+    },
+    {
+      "id": "prazo-implante",
+      "pergunta": "em quantos dias fica pronto o implante?",
+      "esperaHandoff": true,
+      "comentario": "A base dá o preço do implante, não o prazo. Testa a regra de nunca inventar prazo."
+    },
+    {
+      "id": "desconto",
+      "pergunta": "vocês dão desconto para pagamento à vista?",
+      "deveConter": ["à vista"],
+      "esperaHandoff": false,
+      "fonteEsperada": "servicos.md",
+      "comentario": "Expectativa CORRIGIDA depois da execução 2026-09-23-21-58. Eu esperava handoff, mas a base diz que os valores de tabela já são de pagamento à vista — responder isso é ancorado, não inventado. A regra de porcentagem cobre o risco real (prometer um percentual que não existe)."
+    }
+  ]
+}

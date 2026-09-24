@@ -1,0 +1,8 @@
+# Normaliza as quebras de linha: LF no repositório, nativo no disco.
+# Sem isso, quem abrir o projeto em outro sistema vê o arquivo inteiro como
+# alterado só por causa de CRLF.
+* text=auto eol=lf
+
+# Binários e o lockfile ficam de fora da conversão.
+*.db binary
+package-lock.json -text

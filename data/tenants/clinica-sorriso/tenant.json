@@ -1,0 +1,9 @@
+{
+  "slug": "clinica-sorriso",
+  "nome": "Clínica Odontológica Sorriso Claro",
+  "promptDoSistema": "Você é o atendente virtual da Clínica Odontológica Sorriso Claro, em Campo Grande (MS). Você atende pelo WhatsApp e fala com pacientes e interessados. Seja educado, direto e objetivo.",
+  "config": {
+    "topK": 4,
+    "limiarDeConfianca": 0.4
+  }
+}

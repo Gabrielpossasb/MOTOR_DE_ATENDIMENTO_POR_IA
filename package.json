@@ -1,0 +1,30 @@
+{
+  "name": "motor-atendimento-ia",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Motor de atendimento por IA — núcleo agnóstico de canal, fase local",
+  "scripts": {
+    "seed": "tsx src/scripts/seed-tenant.ts",
+    "ingest": "tsx src/scripts/ingest.ts",
+    "cli": "tsx src/adapters/cli/index.ts",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit",
+    "calibrar": "tsx src/scripts/calibrar.ts",
+    "avaliar": "tsx src/scripts/avaliar.ts",
+    "relatorio": "tsx src/scripts/relatorio.ts"
+  },
+  "dependencies": {
+    "better-sqlite3": "^13.0.3",
+    "dotenv": "^16.5.0",
+    "openai": "^4.104.0"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.13",
+    "@types/node": "^22.15.0",
+    "tsx": "^4.19.4",
+    "typescript": "^5.8.3",
+    "vitest": "^3.1.4"
+  }
+}
