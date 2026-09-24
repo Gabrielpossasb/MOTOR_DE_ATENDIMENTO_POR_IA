@@ -1,21 +1,35 @@
-# Avaliação 2026-09-24-12-52 — barbearia-do-ze
+# Avaliação 2026-09-24-21-31 — barbearia-do-ze
 
 Modelo `gpt-5.4-mini` · limiar 0.424
 
 | | |
 |---|---|
-| Acurácia | **100.0%** (8/8) |
-| Custo total | US$ 0.002315 |
-| Custo médio por pergunta | US$ 0.000289 |
-| Latência média | 1137 ms |
+| Acurácia | **90.9%** (10/11) |
+| Custo total | US$ 0.003419 |
+| Custo médio por pergunta | US$ 0.000311 |
+| Latência média | 1115 ms |
 
-> Primeira execução para este tenant: não há com o que comparar.
+## Regressões
 
-## Falhas (0)
+Nenhuma. Nada que passava antes falhou agora.
 
-Nenhuma.
+## Falhas (1)
 
-## Passaram (8)
+### FALHOU · `demo-expectativa-errada`
+
+**Pergunta:** quanto custa a sobrancelha?
+
+**Resposta:** Sobrancelha na navalha: R$ 20,00.
+
+**Por que falhou:**
+- `deveConter`: faltou "30"
+- `fonteEsperada`: esperava atendimento.txt, citou: servicos.md, servicos.md, servicos.md
+
+<sub>handoff: esperado não, obtido não · best_score 0.649 · 1023ms · 399→18 tokens · US$ 0.000380</sub>
+
+<sub>fontes: servicos.md §Outros (0.649), servicos.md §Barba (0.473), servicos.md §Corte (0.445)</sub>
+
+## Passaram (10)
 
 ### OK · `preco-corte`
 
@@ -25,7 +39,7 @@ Nenhuma.
 Corte na máquina, sem tesoura: R$ 35,00.
 Corte infantil, até 10 anos: R$ 40,00.
 
-<sub>handoff: esperado não, obtido não · best_score 0.755 · 1813ms · 447→49 tokens · US$ 0.000556</sub>
+<sub>handoff: esperado não, obtido não · best_score 0.755 · 1549ms · 447→49 tokens · US$ 0.000556</sub>
 
 <sub>fontes: servicos.md §Corte (0.755), servicos.md §Barba (0.605), servicos.md §Outros (0.511), atendimento.txt §Horário (0.432)</sub>
 
@@ -36,7 +50,7 @@ Corte infantil, até 10 anos: R$ 40,00.
 **Resposta:** Combo corte mais barba: R$ 75,00.
 Não tenho informação sobre desconto além desse valor aqui.
 
-<sub>handoff: esperado não, obtido não · best_score 0.681 · 1744ms · 452→26 tokens · US$ 0.000456</sub>
+<sub>handoff: esperado não, obtido não · best_score 0.681 · 1382ms · 452→26 tokens · US$ 0.000456</sub>
 
 <sub>fontes: servicos.md §Barba (0.681), servicos.md §Corte (0.593), servicos.md §Outros (0.574), atendimento.txt §Horário (0.541)</sub>
 
@@ -46,7 +60,7 @@ Não tenho informação sobre desconto além desse valor aqui.
 
 **Resposta:** Não, na segunda a barbearia não abre.
 
-<sub>handoff: esperado não, obtido não · best_score 0.444 · 1100ms · 294→14 tokens · US$ 0.000284</sub>
+<sub>handoff: esperado não, obtido não · best_score 0.444 · 1244ms · 294→14 tokens · US$ 0.000284</sub>
 
 <sub>fontes: atendimento.txt §Horário (0.444)</sub>
 
@@ -54,10 +68,10 @@ Não tenho informação sobre desconto além desse valor aqui.
 
 **Pergunta:** posso pagar no crédito?
 
-**Resposta:** Não aceitamos cartão de crédito nem parcelamos.
+**Resposta:** Não aceitamos cartão de crédito.
 Aceitamos dinheiro, Pix e cartão de débito.
 
-<sub>handoff: esperado não, obtido não · best_score 0.542 · 1244ms · 277→25 tokens · US$ 0.000320</sub>
+<sub>handoff: esperado não, obtido não · best_score 0.542 · 1049ms · 277→22 tokens · US$ 0.000307</sub>
 
 <sub>fontes: atendimento.txt §Pagamento (0.542)</sub>
 
@@ -67,7 +81,7 @@ Aceitamos dinheiro, Pix e cartão de débito.
 
 **Resposta:** Não tenho essa informação aqui. Vou chamar alguém da equipe para te ajudar.
 
-<sub>handoff: esperado sim, obtido sim · best_score 0.568 · 1338ms · 358→18 tokens · US$ 0.000350</sub>
+<sub>handoff: esperado sim, obtido sim · best_score 0.568 · 1126ms · 358→18 tokens · US$ 0.000350</sub>
 
 <sub>fontes: nenhuma</sub>
 
@@ -77,7 +91,7 @@ Aceitamos dinheiro, Pix e cartão de débito.
 
 **Resposta:** Não tenho essa informação aqui. Vou chamar alguém da equipe para te ajudar.
 
-<sub>handoff: esperado sim, obtido sim · best_score 0.565 · 1080ms · 357→18 tokens · US$ 0.000349</sub>
+<sub>handoff: esperado sim, obtido sim · best_score 0.565 · 1309ms · 357→18 tokens · US$ 0.000349</sub>
 
 <sub>fontes: nenhuma</sub>
 
@@ -87,7 +101,7 @@ Aceitamos dinheiro, Pix e cartão de débito.
 
 **Resposta:** Não tenho essa informação aqui. Vou chamar alguém da equipe para te ajudar.
 
-<sub>handoff: esperado sim, obtido sim · best_score 0.304 · 376ms · 0→0 tokens · US$ 0.000000</sub>
+<sub>handoff: esperado sim, obtido sim · best_score 0.304 · 348ms · 0→0 tokens · US$ 0.000000</sub>
 
 <sub>fontes: nenhuma</sub>
 
@@ -97,6 +111,28 @@ Aceitamos dinheiro, Pix e cartão de débito.
 
 **Resposta:** Não tenho essa informação aqui. Vou chamar alguém da equipe para te ajudar.
 
-<sub>handoff: esperado sim, obtido sim · best_score 0.385 · 403ms · 0→0 tokens · US$ 0.000000</sub>
+<sub>handoff: esperado sim, obtido sim · best_score 0.385 · 362ms · 0→0 tokens · US$ 0.000000</sub>
 
 <sub>fontes: nenhuma</sub>
+
+### OK · `sobrancelha`
+
+**Pergunta:** fazem sobrancelha?
+
+**Resposta:** Sim, fazemos sobrancelha na navalha por R$ 20,00.
+
+<sub>handoff: esperado não, obtido não · best_score 0.528 · 945ms · 284→20 tokens · US$ 0.000303</sub>
+
+<sub>fontes: servicos.md §Outros (0.528)</sub>
+
+### OK · `hora-marcada`
+
+**Pergunta:** preciso marcar hora ou posso chegar e esperar?
+
+**Resposta:** Atendemos por ordem de chegada e também com hora marcada.
+Quem tem hora marcada tem preferência sobre a fila.
+Para marcar, chame no WhatsApp (67) 99845-1200.
+
+<sub>handoff: esperado não, obtido não · best_score 0.613 · 1929ms · 302→46 tokens · US$ 0.000434</sub>
+
+<sub>fontes: atendimento.txt §Agendamento (0.613)</sub>

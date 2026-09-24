@@ -4,7 +4,9 @@
     {
       "id": "preco-corte",
       "pergunta": "quanto custa o corte?",
-      "deveConter": ["45"],
+      "deveConter": [
+        "45"
+      ],
       "esperaHandoff": false,
       "fonteEsperada": "servicos.md",
       "comentario": "FAMÍLIA 1: o documento responde."
@@ -12,7 +14,9 @@
     {
       "id": "combo",
       "pergunta": "tem desconto se eu fizer corte e barba junto?",
-      "deveConter": ["75"],
+      "deveConter": [
+        "75"
+      ],
       "esperaHandoff": false,
       "fonteEsperada": "servicos.md",
       "comentario": "FAMÍLIA 1, mas indireta: o documento não diz 'desconto', diz 'combo'. Testa se a busca acha por sentido e não por palavra."
@@ -20,7 +24,9 @@
     {
       "id": "abre-segunda",
       "pergunta": "vocês abrem na segunda?",
-      "deveConter": ["não"],
+      "deveConter": [
+        "não"
+      ],
       "esperaHandoff": false,
       "fonteEsperada": "atendimento.txt",
       "comentario": "FAMÍLIA 1: resposta negativa que ESTÁ no documento. Diferente de não saber."
@@ -28,7 +34,9 @@
     {
       "id": "aceita-credito",
       "pergunta": "posso pagar no crédito?",
-      "deveConter": ["não"],
+      "deveConter": [
+        "não"
+      ],
       "esperaHandoff": false,
       "fonteEsperada": "atendimento.txt",
       "comentario": "FAMÍLIA 1: o documento diz explicitamente que não aceita."
@@ -56,6 +64,23 @@
       "pergunta": "vocês entregam pizza em casa?",
       "esperaHandoff": true,
       "comentario": "FAMÍLIA 3: fora do assunto, deve ser barrado pelo limiar sem chamar o LLM."
+    },
+    {
+      "id": "sobrancelha",
+      "pergunta": "fazem sobrancelha?",
+      "deveConter": [
+        "20"
+      ],
+      "esperaHandoff": false,
+      "fonteEsperada": "servicos.md",
+      "comentario": "FAMÍLIA 1: está na seção Outros."
+    },
+    {
+      "id": "hora-marcada",
+      "pergunta": "preciso marcar hora ou posso chegar e esperar?",
+      "esperaHandoff": false,
+      "fonteEsperada": "atendimento.txt",
+      "comentario": "FAMÍLIA 1 sem deveConter: a resposta é textual, não numérica. Sem palavra-chave obrigatória, o teste ainda checa handoff, fonte e as regras globais."
     }
   ]
 }
