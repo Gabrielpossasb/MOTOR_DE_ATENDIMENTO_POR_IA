@@ -19,6 +19,33 @@ import { custoDeEmbedding, EmbedderOpenAI } from '../core/rag/embedder.js';
 
 const EXTENSOES_ACEITAS = ['.txt', '.md'];
 
+/**
+ * Arquivo começando com `_` não é ingerido.
+ *
+ * A pasta do tenant guarda duas coisas de naturezas diferentes: os documentos
+ * que o bot pode responder e arquivos de apoio (instruções, rascunhos, notas
+ * internas). Sem uma marca, o `_LEIA-ME.md` gerado pelo scaffold virava base de
+ * conhecimento e o bot passava a "saber" responder sobre `npm run seed`.
+ *
+ * Use o prefixo para qualquer coisa que o cliente não deva ver como resposta.
+ */
+export function ehArquivoDeApoio(nome: string): boolean {
+  return nome.startsWith('_');
+}
+
+/**
+ * Filtra e ordena os arquivos que devem virar base de conhecimento.
+ *
+ * Separado do resto para ter teste próprio: foi aqui que o manual do scaffold
+ * escapou para dentro da base de um cliente.
+ */
+export function selecionarArquivos(nomes: string[]): string[] {
+  return nomes
+    .filter((nome) => EXTENSOES_ACEITAS.includes(path.extname(nome).toLowerCase()))
+    .filter((nome) => !ehArquivoDeApoio(nome))
+    .sort();
+}
+
 async function principal(): Promise<void> {
   const slug = process.argv[2];
   const forcar = process.argv.includes('--forcar');
@@ -39,10 +66,7 @@ async function principal(): Promise<void> {
     const tenant = carregarTenant(db, slug);
     const embedder = new EmbedderOpenAI();
 
-    const arquivos = fs
-      .readdirSync(pasta)
-      .filter((nome) => EXTENSOES_ACEITAS.includes(path.extname(nome).toLowerCase()))
-      .sort();
+    const arquivos = selecionarArquivos(fs.readdirSync(pasta));
 
     if (arquivos.length === 0) {
       console.log(`Nenhum .txt ou .md em ${pasta}.`);
@@ -113,7 +137,11 @@ async function principal(): Promise<void> {
   }
 }
 
-principal().catch((erro: unknown) => {
-  console.error('Falha na ingestão:', erro instanceof Error ? erro.message : erro);
-  process.exit(1);
-});
+// Só executa quando chamado pela linha de comando. Importar este módulo num
+// teste não pode disparar uma ingestão de verdade — seria rede e dinheiro.
+if (process.argv[1]?.endsWith('ingest.ts')) {
+  principal().catch((erro: unknown) => {
+    console.error('Falha na ingestão:', erro instanceof Error ? erro.message : erro);
+    process.exit(1);
+  });
+}

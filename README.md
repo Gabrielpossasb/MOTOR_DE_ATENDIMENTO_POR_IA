@@ -27,7 +27,7 @@ Outros comandos:
 npm test                              # testes unitários (não usa rede nem crédito)
 npm run typecheck                     # checagem de tipos
 npm run ingest -- <slug> --forcar     # reprocessa tudo, mesmo sem mudanças
-npm run calibrar -- <slug>            # mede os scores de busca para ajustar o limiar
+npm run calibrar -- <slug>            # mede os scores das perguntas do avaliacao.json e sugere o limiar
 npm run avaliar -- <slug>             # suíte de qualidade contra a API real (~US$ 0,01)
 npm run avaliar -- <slug> --repeticoes 5  # roda 5x e mede estabilidade (~US$ 0,05)
 npm run relatorio                     # histórico de todas as avaliações
@@ -79,7 +79,7 @@ npm run novo-tenant -- barbearia-do-ze "Barbearia do Zé"
 ```
 
 Isso cria `data/tenants/barbearia-do-ze/` com `tenant.json`, `avaliacao.json` e
-um `LEIA-ME.md` explicando o que escrever em cada lugar. O comando **não
+um `_LEIA-ME.md` explicando o que escrever em cada lugar. O comando **não
 sobrescreve** uma pasta existente.
 
 Depois:
@@ -107,6 +107,9 @@ no mesmo pedaço, então título bom é separação boa. Um assunto por seção,
 sempre com o número junto do contexto — "A limpeza custa R$ 180,00" funciona,
 tabela de preços solta não.
 
+**Arquivo começando com `_` não é ingerido.** É assim que rascunhos, notas
+internas e o próprio `_LEIA-ME.md` ficam na pasta sem virar resposta do bot.
+
 **Na avaliação:** o conjunto precisa de três famílias de pergunta.
 
 | Família | `esperaHandoff` | Por que importa |
@@ -130,14 +133,14 @@ src/
     llm/             # cliente do modelo e montagem dos prompts
     tenant/          # carga do tenant e config efetiva
     conversation/    # janela de contexto da conversa
-    avaliacao/       # regras de acerto e escrita dos logs
-  storage/           # SQLite: conexão, migrations e repositórios
+    avaliacao/       # regras de acerto, logs e medição de estabilidade
     painel/          # números do painel (agregação é decisão, não formatação)
+  storage/           # SQLite: conexão, migrations e repositórios
   adapters/
     cli/             # simulador no terminal (a borda que conhece o terminal)
     web/             # servidor HTTP, conversa e painel (a borda que conhece HTTP)
   scripts/           # seed, ingestão, calibração, avaliação e relatório
-data/tenants/<slug>/ # documentos brutos + tenant.json + avaliacao.json
+data/tenants/<slug>/ # documentos + tenant.json + avaliacao.json (_ = não ingerido)
 logs/                # histórico das avaliações (versionado de propósito)
 tests/
 ```

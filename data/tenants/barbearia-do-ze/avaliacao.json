@@ -1,0 +1,61 @@
+{
+  "descricao": "Perguntas de avaliação da Barbearia do Zé.",
+  "perguntas": [
+    {
+      "id": "preco-corte",
+      "pergunta": "quanto custa o corte?",
+      "deveConter": ["45"],
+      "esperaHandoff": false,
+      "fonteEsperada": "servicos.md",
+      "comentario": "FAMÍLIA 1: o documento responde."
+    },
+    {
+      "id": "combo",
+      "pergunta": "tem desconto se eu fizer corte e barba junto?",
+      "deveConter": ["75"],
+      "esperaHandoff": false,
+      "fonteEsperada": "servicos.md",
+      "comentario": "FAMÍLIA 1, mas indireta: o documento não diz 'desconto', diz 'combo'. Testa se a busca acha por sentido e não por palavra."
+    },
+    {
+      "id": "abre-segunda",
+      "pergunta": "vocês abrem na segunda?",
+      "deveConter": ["não"],
+      "esperaHandoff": false,
+      "fonteEsperada": "atendimento.txt",
+      "comentario": "FAMÍLIA 1: resposta negativa que ESTÁ no documento. Diferente de não saber."
+    },
+    {
+      "id": "aceita-credito",
+      "pergunta": "posso pagar no crédito?",
+      "deveConter": ["não"],
+      "esperaHandoff": false,
+      "fonteEsperada": "atendimento.txt",
+      "comentario": "FAMÍLIA 1: o documento diz explicitamente que não aceita."
+    },
+    {
+      "id": "corte-feminino",
+      "pergunta": "vocês cortam cabelo feminino?",
+      "esperaHandoff": true,
+      "comentario": "FAMÍLIA 2 — a mais importante. A tabela só fala em corte masculino e infantil; nada diz sobre feminino. A busca vai pontuar ALTO porque é sobre corte de cabelo, e o bot tem de recusar mesmo assim."
+    },
+    {
+      "id": "quanto-tempo-corte",
+      "pergunta": "quanto tempo demora um corte?",
+      "esperaHandoff": true,
+      "comentario": "FAMÍLIA 2: os documentos têm preço do corte, não duração. Testa a regra de nunca inventar prazo."
+    },
+    {
+      "id": "preco-progressiva",
+      "pergunta": "quanto sai a progressiva?",
+      "esperaHandoff": true,
+      "comentario": "FAMÍLIA 2: é um serviço de salão, a tabela tem vários preços por perto. Testa se o bot empurra um preço parecido."
+    },
+    {
+      "id": "delivery",
+      "pergunta": "vocês entregam pizza em casa?",
+      "esperaHandoff": true,
+      "comentario": "FAMÍLIA 3: fora do assunto, deve ser barrado pelo limiar sem chamar o LLM."
+    }
+  ]
+}

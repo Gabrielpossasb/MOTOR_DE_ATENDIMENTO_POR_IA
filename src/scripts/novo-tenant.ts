@@ -40,7 +40,9 @@ function principal(): void {
 
   fs.writeFileSync(path.join(pasta, 'tenant.json'), tenantJson(slug, nome), 'utf8');
   fs.writeFileSync(path.join(pasta, 'avaliacao.json'), avaliacaoJson(nome), 'utf8');
-  fs.writeFileSync(path.join(pasta, 'LEIA-ME.md'), leiaMe(slug, nome), 'utf8');
+  // Prefixo `_`: o ingest pula estes arquivos. Sem isso, o próprio manual
+  // viraria base de conhecimento e o bot passaria a responder sobre npm.
+  fs.writeFileSync(path.join(pasta, '_LEIA-ME.md'), leiaMe(slug, nome), 'utf8');
 
   const relativa = path.relative(config.caminhos.raiz, pasta);
 
@@ -48,7 +50,7 @@ function principal(): void {
   console.log('Arquivos:');
   console.log('  tenant.json    — nome, prompt do sistema e ajustes (JÁ PODE EDITAR)');
   console.log('  avaliacao.json — perguntas de teste (PRECISA das perguntas reais do cliente)');
-  console.log('  LEIA-ME.md     — o passo a passo, com o que escrever em cada lugar');
+  console.log('  _LEIA-ME.md    — o passo a passo (o _ faz o ingest ignorar este arquivo)');
   console.log('');
   console.log('Próximos passos:');
   console.log(`  1. Coloque os documentos do cliente (.txt e .md) em ${relativa}`);
@@ -118,6 +120,12 @@ Pasta dos documentos e da avaliação deste cliente.
 
 Jogue aqui os arquivos \`.txt\` e \`.md\` com o que o bot pode responder.
 Outros formatos são ignorados — PDF e DOCX precisam ser convertidos antes.
+
+**Arquivo começando com \`_\` não é ingerido.** É por isso que este manual se
+chama \`_LEIA-ME.md\`: sem o prefixo, ele viraria base de conhecimento e o bot
+passaria a responder sobre \`npm run seed\` como se fosse serviço da empresa.
+Use o \`_\` para rascunhos e notas internas que ficam na pasta mas não devem
+virar resposta.
 
 **O que faz diferença na qualidade:**
 

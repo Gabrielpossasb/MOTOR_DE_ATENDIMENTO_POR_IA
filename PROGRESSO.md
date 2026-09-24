@@ -38,7 +38,7 @@ Comandos de qualidade:
 | Comando | O que faz | Custo |
 |---|---|---|
 | `npm run novo-tenant -- <slug> "<Nome>"` | cria a pasta de um cliente novo com modelos | zero |
-| `npm test` | 142 testes unitários, offline | zero |
+| `npm test` | 154 testes unitários, offline | zero |
 | `npm run typecheck` | checagem de tipos | zero |
 | `npm run calibrar -- <slug>` | mede scores de busca para ajustar o limiar | ~US$ 0,000005 |
 | `npm run avaliar -- <slug>` | 24 perguntas contra a API real, gera logs | ~US$ 0,01 |
@@ -123,7 +123,7 @@ Estado de conversa, handoff persistido, contabilidade e política de testes.
 **Dois tipos, separados de propósito.** Juntos os dois pioram: o determinístico
 fica lento e caro, o não-determinístico some no ruído.
 
-**`npm test`** — 142 testes unitários, offline, grátis, ~2,7s. Rode a cada
+**`npm test`** — 154 testes unitários, offline, grátis, ~3s. Rode a cada
 salvamento. Embedder e LLM são sempre dublês; **nenhum teste unitário toca a
 rede**. Um teste só entra se falha por *um* motivo nomeável, se o nome descreve
 comportamento (não implementação), e — quando nasce de bug real — traz comentário
@@ -351,6 +351,38 @@ podendo ser versionado sem levar a chave junto.
 
 Trocar `LLM_MODEL` sem atualizar os preços em `config.ts` faz o custo reportado
 em cada mensagem virar ficção.
+
+---
+
+## Dois erros achados ao cadastrar o primeiro cliente (2026-09-24)
+
+Criar uma barbearia de teste com o scaffold expôs duas falhas que nenhum teste
+unitário pegaria, porque as duas só aparecem com uma pasta de tenant de verdade.
+
+**1. O manual virou base de conhecimento.** O `LEIA-ME.md` gerado pelo scaffold
+estava na mesma pasta que o `ingest` varre em busca de `.md`. Resultado: 10 dos
+17 chunks da barbearia eram o manual, e o bot passou a "saber" responder sobre
+`npm run seed` como se fosse serviço da empresa.
+
+Conserto: **arquivo começando com `_` não é ingerido**, e o scaffold agora gera
+`_LEIA-ME.md`. Vale como convenção geral para rascunhos e notas internas.
+
+**2. O `calibrar.ts` tinha as perguntas da clínica escritas no código.** Rodá-lo
+na barbearia media "quanto custa o implante?" contra documentos de barbearia —
+inútil.
+
+Conserto: as perguntas vêm do `avaliacao.json` do próprio tenant, e o campo
+`esperaHandoff` já diz a qual grupo cada uma pertence. O script também passou a
+**sugerir** um limiar em vez de só mostrar números.
+
+Ambos os scripts ganharam guarda de entrada (`if process.argv[1] endsWith ...`)
+para poderem ser importados por um teste sem disparar uma ingestão de verdade.
+
+### A barbearia ficou no projeto
+`data/tenants/barbearia-do-ze/` é um segundo tenant real, com 7 chunks, limiar
+próprio (0,424, calibrado) e 8 perguntas cobrindo as três famílias. Serve de
+exemplo e prova que o isolamento multi-tenant funciona com dado de verdade.
+Pode ser apagada sem afetar nada.
 
 ---
 
