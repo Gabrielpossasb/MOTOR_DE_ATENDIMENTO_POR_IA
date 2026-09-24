@@ -18,6 +18,7 @@ cp .env.example .env          # e preencha OPENAI_API_KEY
 npm run seed   -- clinica-sorriso   # cria o tenant a partir do tenant.json
 npm run ingest -- clinica-sorriso   # documentos -> chunks -> embeddings -> banco
 npm run cli    -- clinica-sorriso   # conversa no terminal
+npm run web    -- clinica-sorriso   # conversa e painel no navegador
 ```
 
 Outros comandos:
@@ -71,7 +72,10 @@ src/
     conversation/    # janela de contexto da conversa
     avaliacao/       # regras de acerto e escrita dos logs
   storage/           # SQLite: conexão, migrations e repositórios
-  adapters/cli/      # simulador no terminal (a borda que conhece o terminal)
+    painel/          # números do painel (agregação é decisão, não formatação)
+  adapters/
+    cli/             # simulador no terminal (a borda que conhece o terminal)
+    web/             # servidor HTTP, conversa e painel (a borda que conhece HTTP)
   scripts/           # seed, ingestão, calibração, avaliação e relatório
 data/tenants/<slug>/ # documentos brutos + tenant.json + avaliacao.json
 logs/                # histórico das avaliações (versionado de propósito)
@@ -194,9 +198,9 @@ Acompanhe em [PROGRESSO.md](PROGRESSO.md) — passo a passo do que foi feito, o 
 falta e por que cada decisão foi tomada. Atualizado ao fim de cada etapa.
 
 
-**Etapas 1 e 2 prontas.** Ingestão, busca, CLI, estado de conversa com janela de
-contexto, handoff persistido, contabilidade de custo por mensagem, suíte de
-avaliação com logs — 103 testes unitários e 100% na última avaliação.
+**Etapas 1, 2 e 3 prontas.** Ingestão, busca, CLI, estado de conversa com janela
+de contexto, handoff persistido, contabilidade de custo por mensagem, suíte de
+avaliação com logs, adaptador web e painel — 126 testes unitários e 100% na
+última avaliação.
 
-**Próxima:** Etapa 3 — adaptador web e painel (conversas, taxa de resolução,
-custo acumulado, lista de `unanswered`).
+**Próxima:** Etapa 4 — suíte de avaliação formal e medição de estabilidade.

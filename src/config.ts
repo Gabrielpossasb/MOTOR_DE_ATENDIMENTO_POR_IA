@@ -84,6 +84,13 @@ export const config = {
     limiarDeConfianca: 0.4,
   },
 
+  /** Adaptador web (simulador e painel). */
+  web: {
+    porta: Number(process.env.WEB_PORT ?? 3000),
+    /** Teto do corpo da requisição: mensagem de atendimento não tem megabytes. */
+    tamanhoMaximoDoCorpo: 64 * 1024,
+  },
+
   /** Estado e janela de contexto da conversa. */
   conversa: {
     /**

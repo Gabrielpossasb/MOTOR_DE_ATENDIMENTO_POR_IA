@@ -3,8 +3,8 @@
 Arquivo vivo: atualizado ao fim de cada etapa. Serve para você acompanhar e
 para uma sessão nova retomar o trabalho sem precisar reconstruir o contexto.
 
-**Última atualização:** 2026-09-23, ao fim da Etapa 2.
-**Estado:** Etapas 1 e 2 concluídas. Próxima: Etapa 3 (adaptador web + painel).
+**Última atualização:** 2026-09-24, ao fim da Etapa 3.
+**Estado:** Etapas 1, 2 e 3 concluídas. Próxima: Etapa 4 (suíte de avaliação formal).
 
 ---
 
@@ -36,13 +36,14 @@ Comandos de qualidade:
 
 | Comando | O que faz | Custo |
 |---|---|---|
-| `npm test` | 103 testes unitários, offline | zero |
+| `npm test` | 126 testes unitários, offline | zero |
 | `npm run typecheck` | checagem de tipos | zero |
 | `npm run calibrar -- <slug>` | mede scores de busca para ajustar o limiar | ~US$ 0,000005 |
 | `npm run avaliar -- <slug>` | 24 perguntas contra a API real, gera logs | ~US$ 0,01 |
 | `npm run relatorio` | histórico de todas as avaliações | zero |
 | `npm run relatorio -- <id>` | trajetória de uma pergunta | zero |
 | `npm run relatorio -- --instaveis` | perguntas que oscilam | zero |
+| `npm run web -- <slug>` | conversa em http://localhost:3000/ e painel em /painel | por mensagem |
 
 ---
 
@@ -119,7 +120,7 @@ Estado de conversa, handoff persistido, contabilidade e política de testes.
 **Dois tipos, separados de propósito.** Juntos os dois pioram: o determinístico
 fica lento e caro, o não-determinístico some no ruído.
 
-**`npm test`** — 103 testes unitários, offline, grátis, ~2s. Rode a cada
+**`npm test`** — 126 testes unitários, offline, grátis, ~2,5s. Rode a cada
 salvamento. Embedder e LLM são sempre dublês; **nenhum teste unitário toca a
 rede**. Um teste só entra se falha por *um* motivo nomeável, se o nome descreve
 comportamento (não implementação), e — quando nasce de bug real — traz comentário
@@ -191,21 +192,47 @@ bastante nos documentos.
 
 ---
 
-## Etapa 3 — A FAZER
+## Etapa 3 — CONCLUÍDA
 
 Adaptador web e painel.
 
-- [ ] Página simples com cara de WhatsApp (`src/adapters/web/`)
-- [ ] Servidor HTTP mínimo, sem framework pesado
-- [ ] Painel com: lista de conversas, taxa de resolução, custo acumulado e
-      lista de `unanswered`
-- [ ] Testes do adaptador web
+### Entregue
+- **Servidor HTTP** com `node:http` puro, sem framework — duas rotas de API e
+  uma pasta de páginas não justificam dependência (`npm run web -- <slug>`)
+- **Página de conversa** com cara de WhatsApp: balões, "digitando…", fontes e
+  custo embaixo de cada resposta, aviso visual quando há handoff
+- **Painel** com taxa de resolução, conversas por status, custo acumulado e
+  médio, mensagens, latência média, lista de `unanswered` com score e tabela de
+  conversas. Atualiza sozinho a cada 4s, para deixar aberto ao lado da conversa.
+- 15 testes do adaptador, subindo o servidor de verdade em porta efêmera com
+  dublês de embedder e LLM — HTTP real, mas offline e grátis
 
-**Já pronto para isso:** `custoAcumulado()` e `listarPerguntasSemResposta()` em
-`src/storage/repositories/`, e `listarConversas()`.
+### Decisões
+- **`rotas.ts` separado de `server.ts`.** O roteamento precisava ser testável;
+  `server.ts` ficou só com a montagem das dependências reais e o `listen`.
+- **A agregação do painel mora no core** (`src/core/painel/painel-service.ts`),
+  não no adaptador. O que conta como "resolvido" é decisão de negócio, não
+  formatação — e assim tem teste offline.
+- **Taxa de resolução conta por CONVERSA, não por mensagem.** Uma conversa com
+  cinco acertos e um handoff no fim não foi resolvida pelo bot: alguém da equipe
+  teve de entrar. Contar por mensagem esconderia exatamente o que interessa.
+- **Cada aba do navegador é um contato diferente** (`sessionStorage`), o que
+  permite testar várias conversas simultâneas no mesmo tenant.
 
-**Atenção ao fazer:** o adaptador web é borda. Ele chama `Motor.responder()` e
-formata para HTTP — nenhuma lógica de negócio pode nascer ali.
+### Segurança verificada
+A rota de arquivos estáticos resolve o caminho e **recusa qualquer coisa fora da
+pasta de páginas**, inclusive com travessia codificada (`%2e%2e%2f`). Sem essa
+barreira, `../../../.env` entregaria a chave da OpenAI a quem pedisse. Há teste
+para isso, conferindo que a resposta não contém `OPENAI_API_KEY`.
+
+### Observações da execução real
+- UTF-8 passa íntegro pelo servidor (testado com "vocês atendem crianças? é
+  urgente"). Um `voc�s vendem pizza?` que aparece no painel veio de um teste meu
+  com `curl` no Git Bash do Windows, que mangueou a codificação **antes** de
+  enviar — não é falha do servidor.
+- Encerrar o processo do servidor no Windows às vezes deixa a porta presa
+  (`EADDRINUSE`). Se acontecer: `netstat -ano | grep :3000` e
+  `taskkill //F //PID <pid>`.
 
 ---
 
@@ -238,10 +265,12 @@ Confirmado com o usuário, não fazer:
 
 ## Pendências e avisos
 
-- **Ainda não há git neste projeto.** Foi oferecido `git init` + commit inicial;
-  aguardando decisão. O `.gitignore` já existe e já ignora `.env` e `data/*.db`.
+- **Git inicializado** em 2026-09-23, branch `main`, commit `55c9005` com as
+  Etapas 1 e 2 (53 arquivos). Conferido: `.env` **não** está versionado.
+  `.gitattributes` normaliza as quebras de linha (LF no repositório).
 - **A chave da OpenAI foi colada uma vez no `.env.example`** (arquivo versionado).
-  Foi movida para `.env` e o placeholder restaurado. Como não há git, ela nunca
-  saiu da máquina — mas vale trocar a chave se quiser zerar o risco.
+  Foi movida para `.env` e o placeholder restaurado **antes** de existir git, e
+  o commit inicial não contém a chave. Ainda assim, rotacionar a chave é o
+  caminho seguro se quiser zerar o risco.
 - Os arquivos em `logs/` **são versionados de propósito**: é o histórico que
   permite calibrar.

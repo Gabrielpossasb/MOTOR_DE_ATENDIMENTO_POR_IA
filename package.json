@@ -13,7 +13,8 @@
     "typecheck": "tsc --noEmit",
     "calibrar": "tsx src/scripts/calibrar.ts",
     "avaliar": "tsx src/scripts/avaliar.ts",
-    "relatorio": "tsx src/scripts/relatorio.ts"
+    "relatorio": "tsx src/scripts/relatorio.ts",
+    "web": "tsx src/adapters/web/server.ts"
   },
   "dependencies": {
     "better-sqlite3": "^13.0.3",

@@ -1,0 +1,272 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Simulador de atendimento</title>
+    <link rel="stylesheet" href="/estilo.css" />
+    <style>
+      body {
+        display: flex;
+        justify-content: center;
+        min-height: 100vh;
+      }
+
+      .telefone {
+        width: 100%;
+        max-width: 480px;
+        height: 100vh;
+        display: flex;
+        flex-direction: column;
+        background: var(--fundo-chat);
+      }
+
+      .mensagens {
+        flex: 1;
+        overflow-y: auto;
+        padding: 16px 12px;
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+      }
+
+      .balao {
+        max-width: 78%;
+        padding: 7px 10px;
+        border-radius: 8px;
+        font-size: 14.5px;
+        line-height: 1.4;
+        white-space: pre-wrap;
+        word-wrap: break-word;
+        box-shadow: 0 1px 0.5px rgba(11, 20, 26, 0.13);
+      }
+
+      .balao.cliente {
+        align-self: flex-end;
+        background: var(--balao-cliente);
+        border-top-right-radius: 0;
+      }
+
+      .balao.bot {
+        align-self: flex-start;
+        background: var(--balao-bot);
+        border-top-left-radius: 0;
+      }
+
+      .meta {
+        font-size: 11px;
+        color: var(--texto-fraco);
+        margin-top: 4px;
+        border-top: 1px solid #0000000f;
+        padding-top: 4px;
+      }
+
+      /* O aviso que aparece quando o bot passa a conversa para um humano. */
+      .aviso {
+        align-self: center;
+        background: var(--amarelo);
+        border: 1px solid var(--amarelo-borda);
+        color: #7a5b00;
+        font-size: 12px;
+        padding: 6px 12px;
+        border-radius: 8px;
+        max-width: 90%;
+        text-align: center;
+      }
+
+      .digitando {
+        align-self: flex-start;
+        color: var(--texto-fraco);
+        font-size: 13px;
+        font-style: italic;
+        padding: 4px 10px;
+      }
+
+      .barra {
+        display: flex;
+        gap: 8px;
+        padding: 10px;
+        background: #f0f2f5;
+        border-top: 1px solid var(--borda);
+      }
+
+      .barra input {
+        flex: 1;
+        border: 1px solid var(--borda);
+        border-radius: 20px;
+        padding: 10px 16px;
+        font-size: 14.5px;
+        outline: none;
+        font-family: inherit;
+      }
+
+      .barra input:focus {
+        border-color: var(--verde-claro);
+      }
+
+      .barra button {
+        background: var(--verde-escuro);
+        color: #fff;
+        border: 0;
+        border-radius: 50%;
+        width: 42px;
+        height: 42px;
+        font-size: 17px;
+        cursor: pointer;
+      }
+
+      .barra button:disabled {
+        opacity: 0.5;
+        cursor: default;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="telefone">
+      <div class="cabecalho">
+        <div>
+          <h1 id="titulo">Atendimento</h1>
+          <div class="sub" id="subtitulo">simulador local</div>
+        </div>
+        <a href="/painel">Painel</a>
+      </div>
+
+      <div class="mensagens" id="mensagens"></div>
+
+      <form class="barra" id="formulario">
+        <input
+          id="entrada"
+          type="text"
+          placeholder="Escreva uma mensagem"
+          autocomplete="off"
+          autofocus
+        />
+        <button type="submit" id="enviar">&#10148;</button>
+      </form>
+    </div>
+
+    <script>
+      // Um identificador por aba: cada aba é um "contato" diferente, o que
+      // permite testar várias conversas ao mesmo tempo no mesmo tenant.
+      const contatoId =
+        sessionStorage.getItem('contatoId') ||
+        (() => {
+          const novo = 'web-' + Math.random().toString(36).slice(2, 8);
+          sessionStorage.setItem('contatoId', novo);
+          return novo;
+        })();
+
+      const elMensagens = document.getElementById('mensagens');
+      const elEntrada = document.getElementById('entrada');
+      const elEnviar = document.getElementById('enviar');
+      const elFormulario = document.getElementById('formulario');
+
+      document.getElementById('subtitulo').textContent = 'contato ' + contatoId;
+
+      function rolarParaOFim() {
+        elMensagens.scrollTop = elMensagens.scrollHeight;
+      }
+
+      function adicionarBalao(texto, quem, meta) {
+        const balao = document.createElement('div');
+        balao.className = 'balao ' + quem;
+        balao.textContent = texto;
+
+        if (meta) {
+          const rodape = document.createElement('div');
+          rodape.className = 'meta';
+          rodape.textContent = meta;
+          balao.appendChild(rodape);
+        }
+
+        elMensagens.appendChild(balao);
+        rolarParaOFim();
+      }
+
+      function adicionarAviso(texto) {
+        const aviso = document.createElement('div');
+        aviso.className = 'aviso';
+        aviso.textContent = texto;
+        elMensagens.appendChild(aviso);
+        rolarParaOFim();
+      }
+
+      function formatarMeta(resposta) {
+        const uso = resposta.uso;
+        const fontes = resposta.fontes
+          .map((f) => f.arquivo + (f.secao ? ' §' + f.secao : '') + ' (' + f.score.toFixed(2) + ')')
+          .join(' · ');
+
+        const custo = 'US$ ' + uso.custoEstimadoUsd.toFixed(6);
+        const numeros = uso.latenciaMs + 'ms · ' + custo + ' · score ' + resposta.melhorScore.toFixed(3);
+
+        return fontes ? fontes + '\n' + numeros : numeros;
+      }
+
+      async function enviar(texto) {
+        adicionarBalao(texto, 'cliente');
+
+        const digitando = document.createElement('div');
+        digitando.className = 'digitando';
+        digitando.textContent = 'digitando…';
+        elMensagens.appendChild(digitando);
+        rolarParaOFim();
+
+        try {
+          const resposta = await fetch('/api/mensagem', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ contatoId, texto }),
+          });
+
+          const dados = await resposta.json();
+          digitando.remove();
+
+          if (!resposta.ok) {
+            adicionarAviso('Erro: ' + (dados.erro || resposta.status));
+            return;
+          }
+
+          // Conversa já com um humano: o bot não manda nada. No WhatsApp isso
+          // seria silêncio; aqui mostramos o estado para você enxergar.
+          if (dados.aguardandoHumano) {
+            adicionarAviso('Esta conversa já foi passada para um atendente. O bot não responde mais.');
+            return;
+          }
+
+          adicionarBalao(dados.texto, 'bot', formatarMeta(dados));
+
+          if (dados.precisaDeHumano) {
+            adicionarAviso('Handoff registrado (' + dados.motivoDoHandoff + '). A equipe foi acionada.');
+          }
+        } catch (erro) {
+          digitando.remove();
+          adicionarAviso('Falha de rede: ' + erro.message);
+        }
+      }
+
+      elFormulario.addEventListener('submit', async (evento) => {
+        evento.preventDefault();
+        const texto = elEntrada.value.trim();
+        if (texto.length === 0) return;
+
+        elEntrada.value = '';
+        elEntrada.disabled = true;
+        elEnviar.disabled = true;
+
+        await enviar(texto);
+
+        elEntrada.disabled = false;
+        elEnviar.disabled = false;
+        elEntrada.focus();
+      });
+
+      fetch('/api/painel')
+        .then((r) => r.json())
+        .then((p) => {
+          if (p.tenant) document.getElementById('titulo').textContent = p.tenant.nome;
+        })
+        .catch(() => {});
+    </script>
+  </body>
+</html>

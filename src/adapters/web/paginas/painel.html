@@ -1,0 +1,270 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Painel de atendimento</title>
+    <link rel="stylesheet" href="/estilo.css" />
+    <style>
+      body {
+        background: #f4f6f7;
+      }
+
+      .conteudo {
+        max-width: 1000px;
+        margin: 0 auto;
+        padding: 20px 16px 48px;
+      }
+
+      .cartoes {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+        gap: 12px;
+        margin-bottom: 24px;
+      }
+
+      .cartao {
+        background: #fff;
+        border: 1px solid var(--borda);
+        border-radius: 10px;
+        padding: 14px 16px;
+      }
+
+      .cartao .rotulo {
+        font-size: 12px;
+        color: var(--texto-fraco);
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+      }
+
+      .cartao .valor {
+        font-size: 26px;
+        font-weight: 600;
+        margin-top: 6px;
+      }
+
+      .cartao .nota {
+        font-size: 12px;
+        color: var(--texto-fraco);
+        margin-top: 4px;
+      }
+
+      h2 {
+        font-size: 15px;
+        margin: 28px 0 10px;
+      }
+
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        background: #fff;
+        border: 1px solid var(--borda);
+        border-radius: 10px;
+        overflow: hidden;
+        font-size: 13.5px;
+      }
+
+      th,
+      td {
+        text-align: left;
+        padding: 9px 12px;
+        border-bottom: 1px solid var(--borda);
+        vertical-align: top;
+      }
+
+      th {
+        background: #fafafa;
+        font-size: 12px;
+        color: var(--texto-fraco);
+        text-transform: uppercase;
+        letter-spacing: 0.03em;
+      }
+
+      tr:last-child td {
+        border-bottom: 0;
+      }
+
+      .etiqueta {
+        display: inline-block;
+        font-size: 11px;
+        padding: 2px 8px;
+        border-radius: 10px;
+        font-weight: 600;
+      }
+
+      .etiqueta.open {
+        background: #e7f6ec;
+        color: #16794a;
+      }
+
+      .etiqueta.handoff {
+        background: var(--amarelo);
+        color: #7a5b00;
+      }
+
+      .etiqueta.closed {
+        background: #eee;
+        color: #555;
+      }
+
+      .truncar {
+        max-width: 380px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .vazio {
+        padding: 18px;
+        color: var(--texto-fraco);
+        font-size: 13.5px;
+        background: #fff;
+        border: 1px solid var(--borda);
+        border-radius: 10px;
+      }
+
+      .score {
+        font-variant-numeric: tabular-nums;
+        color: var(--vermelho);
+        font-weight: 600;
+      }
+
+      .rodape {
+        margin-top: 28px;
+        font-size: 12px;
+        color: var(--texto-fraco);
+        line-height: 1.6;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="cabecalho">
+      <div>
+        <h1 id="titulo">Painel</h1>
+        <div class="sub" id="subtitulo">carregando…</div>
+      </div>
+      <a href="/">Abrir conversa</a>
+    </div>
+
+    <div class="conteudo">
+      <div class="cartoes" id="cartoes"></div>
+
+      <h2>Perguntas sem resposta</h2>
+      <div id="unanswered"></div>
+
+      <h2>Conversas</h2>
+      <div id="conversas"></div>
+
+      <div class="rodape">
+        A <strong>taxa de resolução</strong> conta por conversa, não por mensagem: uma conversa
+        que precisou de humano no fim não foi resolvida pelo bot, por mais que ele tenha
+        acertado as perguntas anteriores.<br />
+        O <strong>score</strong> em "perguntas sem resposta" é a melhor similaridade encontrada na
+        busca. É o dado para calibrar o limiar de confiança — hoje em
+        <span id="limiar">…</span>.
+      </div>
+    </div>
+
+    <script>
+      function moeda(valor) {
+        return 'US$ ' + valor.toFixed(6);
+      }
+
+      function cartao(rotulo, valor, nota) {
+        return (
+          '<div class="cartao"><div class="rotulo">' +
+          rotulo +
+          '</div><div class="valor">' +
+          valor +
+          '</div>' +
+          (nota ? '<div class="nota">' + nota + '</div>' : '') +
+          '</div>'
+        );
+      }
+
+      function escapar(texto) {
+        const div = document.createElement('div');
+        div.textContent = texto;
+        return div.innerHTML;
+      }
+
+      function renderizar(p) {
+        document.getElementById('titulo').textContent = p.tenant.nome;
+        document.getElementById('subtitulo').textContent = 'painel · ' + p.tenant.slug;
+        document.getElementById('limiar').textContent = p.ajustes.limiarDeConfianca;
+
+        document.getElementById('cartoes').innerHTML = [
+          cartao(
+            'Taxa de resolução',
+            (p.taxaDeResolucao * 100).toFixed(0) + '%',
+            p.conversas.emHandoff + ' de ' + p.conversas.total + ' precisaram de humano',
+          ),
+          cartao('Conversas', p.conversas.total, p.conversas.abertas + ' abertas · ' + p.conversas.fechadas + ' fechadas'),
+          cartao('Custo acumulado', moeda(p.custo.acumuladoUsd), moeda(p.custo.medioPorMensagemUsd) + ' por resposta'),
+          cartao('Mensagens', p.mensagens.total, p.mensagens.doBot + ' do bot · ' + p.mensagens.latenciaMediaMs + 'ms em média'),
+          cartao('Sem resposta', p.perguntasSemResposta.length, 'buracos na base de conhecimento'),
+        ].join('');
+
+        // Perguntas sem resposta: a lista que diz que documento falta escrever.
+        const semResposta = p.perguntasSemResposta;
+        document.getElementById('unanswered').innerHTML =
+          semResposta.length === 0
+            ? '<div class="vazio">Nenhuma pergunta ficou sem resposta ainda.</div>'
+            : '<table><thead><tr><th>Pergunta</th><th>Melhor score</th><th>Quando</th></tr></thead><tbody>' +
+              semResposta
+                .map(
+                  (u) =>
+                    '<tr><td>' +
+                    escapar(u.pergunta) +
+                    '</td><td class="score">' +
+                    (u.melhorScore === null ? '—' : u.melhorScore.toFixed(3)) +
+                    '</td><td>' +
+                    u.criadaEm +
+                    '</td></tr>',
+                )
+                .join('') +
+              '</tbody></table>';
+
+        const conversas = p.listaDeConversas;
+        document.getElementById('conversas').innerHTML =
+          conversas.length === 0
+            ? '<div class="vazio">Nenhuma conversa ainda. Abra a conversa e mande uma mensagem.</div>'
+            : '<table><thead><tr><th>Contato</th><th>Canal</th><th>Status</th><th>Msgs</th><th>Custo</th><th>Última mensagem</th></tr></thead><tbody>' +
+              conversas
+                .map(
+                  (c) =>
+                    '<tr><td>' +
+                    escapar(c.contatoId) +
+                    '</td><td>' +
+                    escapar(c.canal) +
+                    '</td><td><span class="etiqueta ' +
+                    c.status +
+                    '">' +
+                    c.status +
+                    '</span></td><td>' +
+                    c.totalDeMensagens +
+                    '</td><td>' +
+                    moeda(c.custoUsd) +
+                    '</td><td class="truncar">' +
+                    escapar(c.ultimaMensagem) +
+                    '</td></tr>',
+                )
+                .join('') +
+              '</tbody></table>';
+      }
+
+      async function atualizar() {
+        try {
+          const resposta = await fetch('/api/painel');
+          renderizar(await resposta.json());
+        } catch (erro) {
+          document.getElementById('subtitulo').textContent = 'falha ao carregar: ' + erro.message;
+        }
+      }
+
+      atualizar();
+      // Atualiza sozinho para você deixar o painel aberto ao lado da conversa.
+      setInterval(atualizar, 4000);
+    </script>
+  </body>
+</html>

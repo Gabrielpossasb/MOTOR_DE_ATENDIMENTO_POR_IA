@@ -5,3 +5,7 @@ data/*.db-shm
 data/*.db-wal
 dist/
 *.log
+
+# Artefatos de inspeção do navegador
+.playwright-mcp/
+*.png
