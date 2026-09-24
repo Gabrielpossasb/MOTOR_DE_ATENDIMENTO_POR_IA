@@ -279,16 +279,26 @@ export class Motor {
 /**
  * Detecta se o modelo desistiu e pediu ajuda humana.
  *
- * Comparar com `includes` e a frase literal não serve: o modelo costuma
- * encaixar a frase no meio de outra ("Não atendemos X. Se for Y, não tenho
- * essa informação...") e trocar a maiúscula inicial. Quando isso escapa, a
- * conversa fica marcada como resolvida e ninguém é chamado para atender o
- * cliente — o pior erro possível neste sistema, porque é silencioso.
+ * Quando isto erra, a conversa fica marcada como resolvida e ninguém é chamado
+ * para atender o cliente — o pior erro possível neste sistema, porque é
+ * silencioso. Duas formas de escape já foram observadas com modelo real:
  *
- * Por isso comparamos os dois lados normalizados.
+ *   1. A frase exata com a maiúscula trocada, encaixada no meio de outra
+ *      ("Não atendemos X. Se for Y, não tenho essa informação...").
+ *   2. A primeira oração parafraseada ("Não tenho informação SOBRE DESCONTO À
+ *      VISTA aqui. Vou chamar alguém da equipe para te ajudar.").
+ *
+ * Contra a primeira, comparamos normalizado. Contra a segunda, procuramos
+ * também o marcador — a promessa de escalar, que é a parte estável da frase.
+ * Não adianta o modelo variar como diz que não sabe: se ele prometeu chamar
+ * alguém, alguém precisa ser chamado.
  */
 export function pediuAjudaHumana(texto: string): boolean {
-  return normalizar(texto).includes(normalizar(config.resposta.fraseDeHandoff));
+  const normalizado = normalizar(texto);
+  return (
+    normalizado.includes(normalizar(config.resposta.fraseDeHandoff)) ||
+    normalizado.includes(normalizar(config.resposta.marcadorDeHandoff))
+  );
 }
 
 /** Minúsculas, sem acento e com espaços colapsados, para comparar texto livre. */

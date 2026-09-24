@@ -111,6 +111,20 @@ export const config = {
     maximoDeLinhas: 3,
     /** Frase fixa quando não há base para responder. */
     fraseDeHandoff: 'Não tenho essa informação aqui. Vou chamar alguém da equipe para te ajudar.',
+    /**
+     * Trecho que caracteriza a INTENÇÃO de escalar, independente da redação.
+     *
+     * Existe porque procurar a frase inteira não basta: medindo estabilidade
+     * em 5 rodadas, o modelo produziu "Não tenho informação sobre desconto à
+     * vista aqui. Vou chamar alguém da equipe para te ajudar." — parafraseou a
+     * primeira oração e escapou da detecção. A resposta foi marcada como
+     * resolvida e ninguém seria chamado, embora o bot tivesse acabado de
+     * prometer que chamaria.
+     *
+     * A promessa de escalar é a parte estável da frase, então é ela que
+     * detectamos. Se você mudar `fraseDeHandoff`, ajuste este trecho também.
+     */
+    marcadorDeHandoff: 'vou chamar alguém da equipe',
   },
 } as const;
 

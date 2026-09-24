@@ -153,10 +153,10 @@
     {
       "id": "desconto",
       "pergunta": "vocês dão desconto para pagamento à vista?",
-      "deveConter": ["à vista"],
+      "deveConter": ["desconto"],
       "esperaHandoff": false,
-      "fonteEsperada": "servicos.md",
-      "comentario": "Expectativa CORRIGIDA depois da execução 2026-09-23-21-58. Eu esperava handoff, mas a base diz que os valores de tabela já são de pagamento à vista — responder isso é ancorado, não inventado. A regra de porcentagem cobre o risco real (prometer um percentual que não existe)."
+      "fonteEsperada": "faq.md",
+      "comentario": "Esta pergunta foi a ÚNICA a oscilar na medição de estabilidade de 5 rodadas (passou 2/5, com 3 textos distintos e variação de score zero — ou seja, puro o LLM). A causa era o documento: a base dizia que os valores são 'válidos para pagamento à vista' mas nunca falava de desconto, e o modelo não conseguia decidir se sabia ou não. O conserto foi de produto, não de código: escrever a informação que faltava no faq.md. É para isso que serve a lista de unanswered."
     }
   ]
 }

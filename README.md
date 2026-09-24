@@ -28,7 +28,8 @@ npm test                              # testes unitários (não usa rede nem cr�
 npm run typecheck                     # checagem de tipos
 npm run ingest -- <slug> --forcar     # reprocessa tudo, mesmo sem mudanças
 npm run calibrar -- <slug>            # mede os scores de busca para ajustar o limiar
-npm run avaliar -- <slug>             # suíte de qualidade contra a API real (custa ~US$ 0,01)
+npm run avaliar -- <slug>             # suíte de qualidade contra a API real (~US$ 0,01)
+npm run avaliar -- <slug> --repeticoes 5  # roda 5x e mede estabilidade (~US$ 0,05)
 npm run relatorio                     # histórico de todas as avaliações
 npm run relatorio -- <id-da-pergunta> # trajetória de uma pergunta
 npm run relatorio -- --instaveis      # perguntas que oscilam entre passar e falhar
@@ -155,6 +156,23 @@ aqui.
 A avaliação roda com `semPersistir`, então não cria conversas nem dispara
 handoffs de verdade: avaliar não pode encher a fila da equipe.
 
+### Estabilidade: por que acurácia sozinha engana
+
+95% acertando sempre as mesmas perguntas é uma coisa; 95% sorteando quais é
+outra, bem pior — em produção o cliente faz a pergunta **uma vez só**.
+
+`npm run avaliar -- <slug> --repeticoes 5` roda a suíte cinco vezes e gera
+`logs/ESTABILIDADE.md`, que mostra por pergunta quantas vezes passou, **quantos
+textos distintos** o modelo produziu e a variação do `best_score`.
+
+Essa variação separa as duas causas possíveis de oscilação: como a mesma
+pergunta gera sempre o mesmo embedding, variação acima de zero significa que os
+chunks mudaram (houve reingestão); variação zero com resultado oscilante é
+hesitação do LLM.
+
+Foi essa medição que achou o bug mais sério do projeto — veja
+[PROGRESSO.md](PROGRESSO.md), Etapa 4.
+
 ### Os logs
 
 ```
@@ -198,9 +216,14 @@ Acompanhe em [PROGRESSO.md](PROGRESSO.md) — passo a passo do que foi feito, o 
 falta e por que cada decisão foi tomada. Atualizado ao fim de cada etapa.
 
 
-**Etapas 1, 2 e 3 prontas.** Ingestão, busca, CLI, estado de conversa com janela
-de contexto, handoff persistido, contabilidade de custo por mensagem, suíte de
-avaliação com logs, adaptador web e painel — 126 testes unitários e 100% na
-última avaliação.
+**As 4 etapas da fase local estão prontas.** Ingestão, busca, CLI, estado de
+conversa com janela de contexto, handoff persistido, contabilidade de custo por
+mensagem, adaptador web com painel, suíte de avaliação com logs e medição de
+estabilidade.
 
-**Próxima:** Etapa 4 — suíte de avaliação formal e medição de estabilidade.
+142 testes unitários offline. Última medição: **100% de acurácia e 100% de
+estabilidade** em 5 rodadas consecutivas.
+
+**Próximo passo natural:** trocar os documentos da clínica fictícia pelos de um
+cliente real, escrever as perguntas de avaliação desse cliente e calibrar. Só
+depois disso vale gastar com a infraestrutura do WhatsApp.

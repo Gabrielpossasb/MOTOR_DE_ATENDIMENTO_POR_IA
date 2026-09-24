@@ -222,7 +222,26 @@ describe('pediuAjudaHumana', () => {
     expect(pediuAjudaHumana('Nao  tenho essa  informacao aqui. Vou chamar alguem da equipe para te ajudar.')).toBe(true);
   });
 
+  it('reconhece a promessa de escalar mesmo com a primeira oração parafraseada', () => {
+    // Caso real observado medindo estabilidade em 5 rodadas (2026-09-24):
+    // o modelo trocou "não tenho essa informação" por "não tenho informação
+    // sobre desconto à vista" e escapou da detecção. A resposta foi marcada
+    // como resolvida embora o bot tivesse prometido chamar alguém.
+    const parafraseada =
+      'Os valores de tabela particular são válidos para pagamento à vista. ' +
+      'Não tenho informação sobre desconto à vista aqui. Vou chamar alguém da equipe para te ajudar.';
+
+    expect(pediuAjudaHumana(parafraseada)).toBe(true);
+  });
+
+  it('reconhece a promessa de escalar sozinha, sem a frase completa', () => {
+    expect(pediuAjudaHumana('Vou chamar alguém da equipe para te ajudar com isso.')).toBe(true);
+    expect(pediuAjudaHumana('vou chamar alguem da equipe')).toBe(true);
+  });
+
   it('não confunde uma resposta normal com handoff', () => {
     expect(pediuAjudaHumana('Aos sábados, o atendimento é das 8h às 12h.')).toBe(false);
+    expect(pediuAjudaHumana('A clínica tem três dentistas na equipe.')).toBe(false);
+    expect(pediuAjudaHumana('Um responsável precisa acompanhar a criança.')).toBe(false);
   });
 });

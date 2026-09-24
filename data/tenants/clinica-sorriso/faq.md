@@ -12,6 +12,8 @@ Se o seu plano não está nesta lista, o atendimento é como particular.
 Aceitamos dinheiro, Pix, cartão de débito e cartão de crédito.
 Parcelamos em até 6 vezes sem juros no crédito, com valor mínimo de R$ 100,00
 por parcela. Não trabalhamos com boleto nem com carnê.
+Os valores da tabela já são os de pagamento à vista, então não há desconto
+adicional por pagar à vista ou em Pix.
 
 ## Como agendar
 

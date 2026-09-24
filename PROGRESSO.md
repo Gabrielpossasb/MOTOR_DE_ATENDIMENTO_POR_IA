@@ -3,8 +3,9 @@
 Arquivo vivo: atualizado ao fim de cada etapa. Serve para você acompanhar e
 para uma sessão nova retomar o trabalho sem precisar reconstruir o contexto.
 
-**Última atualização:** 2026-09-24, ao fim da Etapa 3.
-**Estado:** Etapas 1, 2 e 3 concluídas. Próxima: Etapa 4 (suíte de avaliação formal).
+**Última atualização:** 2026-09-24, ao fim da Etapa 4.
+**Estado:** todas as 4 etapas da fase local concluídas. A fase está pronta para
+receber os documentos de um cliente real e ser calibrada com perguntas de verdade.
 
 ---
 
@@ -36,10 +37,11 @@ Comandos de qualidade:
 
 | Comando | O que faz | Custo |
 |---|---|---|
-| `npm test` | 126 testes unitários, offline | zero |
+| `npm test` | 142 testes unitários, offline | zero |
 | `npm run typecheck` | checagem de tipos | zero |
 | `npm run calibrar -- <slug>` | mede scores de busca para ajustar o limiar | ~US$ 0,000005 |
 | `npm run avaliar -- <slug>` | 24 perguntas contra a API real, gera logs | ~US$ 0,01 |
+| `npm run avaliar -- <slug> --repeticoes 5` | roda 5x e mede estabilidade | ~US$ 0,05 |
 | `npm run relatorio` | histórico de todas as avaliações | zero |
 | `npm run relatorio -- <id>` | trajetória de uma pergunta | zero |
 | `npm run relatorio -- --instaveis` | perguntas que oscilam | zero |
@@ -120,7 +122,7 @@ Estado de conversa, handoff persistido, contabilidade e política de testes.
 **Dois tipos, separados de propósito.** Juntos os dois pioram: o determinístico
 fica lento e caro, o não-determinístico some no ruído.
 
-**`npm test`** — 126 testes unitários, offline, grátis, ~2,5s. Rode a cada
+**`npm test`** — 142 testes unitários, offline, grátis, ~2,7s. Rode a cada
 salvamento. Embedder e LLM são sempre dublês; **nenhum teste unitário toca a
 rede**. Um teste só entra se falha por *um* motivo nomeável, se o nome descreve
 comportamento (não implementação), e — quando nasce de bug real — traz comentário
@@ -236,19 +238,79 @@ para isso, conferindo que a resposta não contém `OPENAI_API_KEY`.
 
 ---
 
-## Etapa 4 — A FAZER
+## Etapa 4 — CONCLUÍDA
 
-Suíte de avaliação formal.
+Medição de estabilidade e fechamento do laço de calibração.
 
-- [ ] `scripts/evaluate.ts` conforme o pedido original (JSON de perguntas e
-      respostas esperadas, acurácia, custo médio, latência média)
-- [ ] Avaliar se o `avaliar.ts` da Etapa 2 já cobre, ou se falta algo
-- [ ] Rodar N vezes a mesma suíte para medir **estabilidade**, não só acurácia
+### Sobre o pedido original
+O pedido era um `scripts/evaluate.ts` que lê um JSON de perguntas, roda tudo e
+reporta acurácia, custo médio e latência média. O `avaliar.ts` da Etapa 2 já
+fazia exatamente isso — criar um segundo script com nome em inglês seria
+duplicação. O que faltava de verdade era a pergunta em aberto: **qual a taxa de
+oscilação do modelo?**
 
-**Ponto em aberto que a Etapa 4 precisa resolver:** a mesma pergunta pode dar
-respostas diferentes entre execuções (temperatura 0,2). Foi observado na
-pergunta sobre SUS. Ainda não se sabe qual é a taxa de oscilação nem se ela é
-aceitável. O comando `npm run relatorio -- --instaveis` existe para medir isso.
+### Entregue
+- `npm run avaliar -- <slug> --repeticoes N` roda a mesma suíte N vezes
+- `src/core/avaliacao/estabilidade.ts` mede, por pergunta: quantas vezes passou,
+  se o resultado foi sempre o mesmo, **quantos textos distintos** o modelo
+  produziu e a variação do `best_score`
+- `logs/ESTABILIDADE.md` com as instáveis destacadas primeiro
+- 14 testes da medição
+
+### Por que acurácia sozinha engana
+95% acertando sempre as mesmas perguntas é uma coisa; 95% sorteando quais é
+outra, bem pior — em produção o cliente faz a pergunta **uma vez só**.
+
+A **variação do score** separa as duas causas possíveis: como a mesma pergunta
+gera sempre o mesmo embedding, variação acima de zero significa que os chunks
+mudaram (houve reingestão); variação zero com resultado oscilante é puro o LLM.
+
+### O que a medição revelou
+
+**Primeira medição (5 rodadas):** 97,5% de acurácia média, mas **uma pergunta
+oscilando** — `desconto`, que passou 2/5 com 3 textos distintos e variação de
+score **0.000**. Ou seja: busca perfeitamente determinística, hesitação do LLM.
+
+Ao abrir a trajetória, apareceu um **bug silencioso mais grave que o da Etapa 1**:
+
+> *"Os valores de tabela particular são válidos para pagamento à vista.
+> **Não tenho informação sobre desconto à vista aqui. Vou chamar alguém da
+> equipe para te ajudar.**"*
+
+O bot prometeu chamar a equipe e foi marcado como **resolvido**. A detecção
+procurava a frase configurada; o modelo parafraseou a primeira oração
+("não tenho informação **sobre desconto à vista**") e escapou. Em produção:
+nenhum handoff criado, ninguém chamado, cliente esperando.
+
+**Dois consertos, de naturezas diferentes:**
+
+1. **Código** — `config.resposta.marcadorDeHandoff` (`"vou chamar alguém da
+   equipe"`). A promessa de escalar é a parte estável da frase; não importa
+   como o modelo diga que não sabe, se prometeu chamar alguém, alguém precisa
+   ser chamado.
+2. **Produto** — a causa raiz era o documento. `servicos.md` dizia "válidos para
+   pagamento à vista" e nunca mencionava desconto, então o modelo genuinamente
+   não conseguia decidir se sabia. O conserto foi escrever a informação que
+   faltava no `faq.md`. **É exatamente para isso que serve a lista de
+   `unanswered`.**
+
+**Segunda medição, depois dos dois consertos:**
+
+| | Antes | Depois |
+|---|---|---|
+| Acurácia média | 97,5% | **100%** |
+| Estabilidade | 95,8% | **100%** |
+| Perguntas oscilando | 1 | **0** |
+
+### Quanto o texto varia (mesmo com veredito estável)
+19 das 24 perguntas dão resposta **byte a byte idêntica** nas 5 rodadas. Só 5
+variam a redação; `parcelamento` é a mais solta, com 4 textos em 5 rodadas — e
+passa nas 5. Com temperatura 0,2 o modelo é bem mais determinístico do que a
+observação isolada da Etapa 2 sugeria.
+
+### Custo
+5 rodadas × 24 perguntas = 120 chamadas por **US$ 0,050**. Medir estabilidade
+custa cinco vezes uma avaliação, e vale — foi o que achou o bug.
 
 ---
 
