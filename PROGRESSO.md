@@ -37,6 +37,7 @@ Comandos de qualidade:
 
 | Comando | O que faz | Custo |
 |---|---|---|
+| `npm run novo-tenant -- <slug> "<Nome>"` | cria a pasta de um cliente novo com modelos | zero |
 | `npm test` | 142 testes unitários, offline | zero |
 | `npm run typecheck` | checagem de tipos | zero |
 | `npm run calibrar -- <slug>` | mede scores de busca para ajustar o limiar | ~US$ 0,000005 |
@@ -311,6 +312,45 @@ observação isolada da Etapa 2 sugeria.
 ### Custo
 5 rodadas × 24 perguntas = 120 chamadas por **US$ 0,050**. Medir estabilidade
 custa cinco vezes uma avaliação, e vale — foi o que achou o bug.
+
+---
+
+## Como colocar um cliente real (resumo)
+
+```bash
+npm run novo-tenant -- barbearia-do-ze "Barbearia do Zé"
+```
+
+Cria a pasta com `tenant.json`, `avaliacao.json` e um `LEIA-ME.md` explicando o
+que escrever em cada lugar. Não sobrescreve pasta existente.
+
+Depois: documentos `.txt`/`.md` na pasta → ajustar `promptDoSistema` → escrever
+as perguntas reais em `avaliacao.json` → `seed` → `ingest` → `calibrar` →
+`avaliar --repeticoes 5`.
+
+**O conjunto de perguntas precisa de três famílias**, e a do meio é a que mais
+importa: perguntas que *falam do negócio* mas cuja resposta não está nos
+documentos. É onde o bot inventa se estiver mal calibrado — na clínica de
+exemplo é o caso `cnpj`, que pontua 0,593 na busca e mesmo assim deve ser
+recusado.
+
+---
+
+## `.env` versus `.env.example`
+
+`.env.example` **não é lido por nenhuma linha de código** — aparece só dentro do
+texto de duas mensagens de erro. Quem lê é `dotenv.config()`, e ele lê só o
+`.env`. O `.example` existe para documentar *quais* variáveis o projeto precisa,
+podendo ser versionado sem levar a chave junto.
+
+| Variável | Efeito | Padrão |
+|---|---|---|
+| `OPENAI_API_KEY` | embeddings e chat | obrigatória |
+| `LLM_MODEL` | sobrescreve o modelo de chat | `gpt-5.4-mini` |
+| `WEB_PORT` | porta do adaptador web | `3000` |
+
+Trocar `LLM_MODEL` sem atualizar os preços em `config.ts` faz o custo reportado
+em cada mensagem virar ficção.
 
 ---
 

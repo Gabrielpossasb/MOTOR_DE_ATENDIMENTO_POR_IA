@@ -41,24 +41,83 @@ O CLI também aceita entrada redirecionada, o que serve para testar em lote:
 printf 'qual o horário de sábado?\nvocês vendem pizza?\nsair\n' | npm run cli -- clinica-sorriso
 ```
 
-## Como adicionar um cliente
+## `.env` e `.env.example`
 
-1. Crie `data/tenants/<slug>/tenant.json`:
+São arquivos com papéis opostos, e só um deles faz alguma coisa.
 
-```json
-{
-  "slug": "<slug>",
-  "nome": "Nome do cliente",
-  "promptDoSistema": "Você é o atendente virtual da ...",
-  "config": { "topK": 4, "limiarDeConfianca": 0.4 }
-}
+| | `.env` | `.env.example` |
+|---|---|---|
+| Contém | a chave **real** | um placeholder falso |
+| Versionado no git | **não** (está no `.gitignore`) | **sim** |
+| Lido pelo programa | **sim**, por `dotenv.config()` | **nunca** |
+
+**`.env.example` não influencia nada em tempo de execução.** Ele é documentação:
+existe para quem clona o projeto saber *quais* variáveis precisa definir, sem que
+a sua chave vá junto no repositório. É por isso que ele fica versionado e o
+`.env` não.
+
+Se você o apagasse agora, o projeto continuaria funcionando igual — só ficaria
+mais difícil para outra pessoa (ou para você, numa máquina nova) descobrir o que
+configurar.
+
+Variáveis reconhecidas, todas opcionais exceto a primeira:
+
+| Variável | Efeito | Padrão |
+|---|---|---|
+| `OPENAI_API_KEY` | embeddings e chat. Sem ela, `ingest`, `cli`, `web` e `avaliar` falham | — |
+| `LLM_MODEL` | sobrescreve o modelo de chat | `gpt-5.4-mini` |
+| `WEB_PORT` | porta do adaptador web | `3000` |
+
+O `.env` vence o que está em `config.ts`. Para testar outro modelo sem mexer no
+código, basta uma linha no `.env` — mas **atualize também os preços** em
+`config.ts`, senão o custo reportado em cada mensagem vira ficção.
+
+## Como adicionar um cliente real
+
+```bash
+npm run novo-tenant -- barbearia-do-ze "Barbearia do Zé"
 ```
 
-2. Jogue os documentos (`.txt` e `.md`) na mesma pasta.
-3. `npm run seed -- <slug>` e depois `npm run ingest -- <slug>`.
+Isso cria `data/tenants/barbearia-do-ze/` com `tenant.json`, `avaliacao.json` e
+um `LEIA-ME.md` explicando o que escrever em cada lugar. O comando **não
+sobrescreve** uma pasta existente.
+
+Depois:
+
+1. Jogue os documentos do cliente (`.txt` e `.md`) na pasta.
+2. Ajuste `promptDoSistema` em `tenant.json`.
+3. Escreva em `avaliacao.json` as perguntas que os clientes fazem de verdade.
+4. Rode:
+
+```bash
+npm run seed     -- barbearia-do-ze
+npm run ingest   -- barbearia-do-ze
+npm run calibrar -- barbearia-do-ze                # escolhe o limiar com dado
+npm run avaliar  -- barbearia-do-ze --repeticoes 5 # mede qualidade e estabilidade
+```
 
 A ingestão é idempotente: arquivo cujo conteúdo não mudou é pulado, porque
-embedding custa dinheiro.
+embedding custa dinheiro. Mexeu num documento? Rode `ingest` de novo.
+
+### O que mais afeta a qualidade
+
+**Nos documentos:** use títulos (`## Assunto` no `.md`; no `.txt`, linha curta
+sem ponto final isolada por linhas em branco). O chunker nunca junta duas seções
+no mesmo pedaço, então título bom é separação boa. Um assunto por seção, e
+sempre com o número junto do contexto — "A limpeza custa R$ 180,00" funciona,
+tabela de preços solta não.
+
+**Na avaliação:** o conjunto precisa de três famílias de pergunta.
+
+| Família | `esperaHandoff` | Por que importa |
+|---|---|---|
+| O documento responde | `false` | mede se o bot acha a informação |
+| **Não responde, mas é do ramo** | `true` | **a mais importante** — a busca pontua alto e o bot tem de recusar mesmo assim |
+| Fora do assunto | `true` | deve ser barrado pelo limiar, sem nem chamar o LLM |
+
+A segunda família é onde o bot inventa se estiver mal calibrado. Na clínica de
+exemplo é o caso `cnpj`: fala da clínica (score 0.593) mas a resposta não existe
+nos documentos.
 
 ## Estrutura
 

@@ -5,6 +5,7 @@
   "type": "module",
   "description": "Motor de atendimento por IA — núcleo agnóstico de canal, fase local",
   "scripts": {
+    "novo-tenant": "tsx src/scripts/novo-tenant.ts",
     "seed": "tsx src/scripts/seed-tenant.ts",
     "ingest": "tsx src/scripts/ingest.ts",
     "cli": "tsx src/adapters/cli/index.ts",
