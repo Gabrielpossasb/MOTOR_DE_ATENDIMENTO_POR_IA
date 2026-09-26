@@ -28,6 +28,14 @@ import {
 } from '../../core/avaliacao/arquivo.js';
 import { rodarPerguntas } from '../../core/avaliacao/suite.js';
 import { novoIdDeExecucao } from '../../core/avaliacao/log.js';
+import {
+  alterarAgendamento,
+  cancelarAgendamento,
+  criarAgendamento,
+  listarAgendamentos,
+} from '../../core/agenda/agenda-service.js';
+import { AGENDA_PADRAO, horariosLivres } from '../../core/agenda/disponibilidade.js';
+import type { ConfigDaAgenda } from '../../core/types.js';
 
 export const PASTA_PAGINAS = path.join(path.dirname(fileURLToPath(import.meta.url)), 'paginas');
 
@@ -42,6 +50,7 @@ const PAGINAS: Record<string, string> = {
   '/': 'chat.html',
   '/painel': 'painel.html',
   '/testes': 'testes.html',
+  '/agenda': 'agenda.html',
 };
 
 export interface ContextoWeb {
@@ -94,6 +103,79 @@ export async function tratar(
     const encerrada = encerrarConversa(ctx.db, tenant.id, contatoId);
 
     responderJson(res, 200, { encerrada: encerrada ?? null });
+    return;
+  }
+
+  // --- Agenda -----------------------------------------------------------
+  // A recepção mexe na agenda por aqui. Sem `contatoId` nas operações: quem
+  // está do outro lado desta tela é a clínica, não o cliente, e precisa poder
+  // corrigir o agendamento de qualquer um.
+
+  if (req.method === 'GET' && rota === '/api/agenda') {
+    const tenant = carregarTenant(ctx.db, ctx.slug);
+    const agenda = agendaDoTenant(tenant.config.agenda);
+    const data = url.searchParams.get('data');
+
+    responderJson(res, 200, {
+      agendamentos: listarAgendamentos(ctx.db, tenant.id, { incluirCancelados: true }),
+      duracaoMin: agenda.duracaoMin,
+      ...(data ? { livres: horariosLivres(ctx.db, tenant.id, agenda, data) } : {}),
+    });
+    return;
+  }
+
+  if (req.method === 'POST' && rota === '/api/agenda') {
+    const corpo = await lerCorpo(req);
+    const tenant = carregarTenant(ctx.db, ctx.slug);
+
+    responderResultado(
+      res,
+      criarAgendamento(ctx.db, tenant.id, agendaDoTenant(tenant.config.agenda), {
+        contatoId: texto(corpo.contatoId) || 'recepcao',
+        inicio: texto(corpo.inicio),
+        nome: texto(corpo.nome),
+        ...(texto(corpo.servico) ? { servico: texto(corpo.servico) } : {}),
+        ...(texto(corpo.telefone) ? { telefone: texto(corpo.telefone) } : {}),
+        ...(texto(corpo.convenio) ? { convenio: texto(corpo.convenio) } : {}),
+        ...(texto(corpo.observacoes) ? { observacoes: texto(corpo.observacoes) } : {}),
+      }),
+    );
+    return;
+  }
+
+  if (req.method === 'PUT' && rota === '/api/agenda') {
+    const corpo = await lerCorpo(req);
+    const id = Number(corpo.id);
+
+    if (!Number.isInteger(id) || id <= 0) {
+      responderJson(res, 400, { erro: 'Informe o id do agendamento.' });
+      return;
+    }
+
+    const tenant = carregarTenant(ctx.db, ctx.slug);
+    responderResultado(
+      res,
+      alterarAgendamento(
+        ctx.db,
+        tenant.id,
+        agendaDoTenant(tenant.config.agenda),
+        id,
+        texto(corpo.inicio),
+      ),
+    );
+    return;
+  }
+
+  if (req.method === 'DELETE' && rota === '/api/agenda') {
+    const id = Number(url.searchParams.get('id'));
+
+    if (!Number.isInteger(id) || id <= 0) {
+      responderJson(res, 400, { erro: 'Informe o id do agendamento.' });
+      return;
+    }
+
+    const tenant = carregarTenant(ctx.db, ctx.slug);
+    responderResultado(res, cancelarAgendamento(ctx.db, tenant.id, id));
     return;
   }
 
@@ -224,6 +306,39 @@ export function servirArquivo(res: http.ServerResponse, nome: string): void {
 
   res.writeHead(200, { 'Content-Type': TIPOS[path.extname(destino)] ?? 'application/octet-stream' });
   res.end(fs.readFileSync(destino));
+}
+
+/** Campo de texto do corpo, já aparado. Ausente vira string vazia. */
+function texto(valor: unknown): string {
+  return typeof valor === 'string' ? valor.trim() : '';
+}
+
+/** A agenda do tenant, ou os padrões para quem ainda não configurou. */
+function agendaDoTenant(agenda: ConfigDaAgenda | undefined): ConfigDaAgenda {
+  return agenda ?? AGENDA_PADRAO;
+}
+
+/**
+ * Traduz o resultado tipado da agenda para HTTP.
+ *
+ * O `motivo` vira 409 em conflito e 400 no resto: conflito não é erro de quem
+ * pediu — o horário estava livre quando a tela foi carregada e outra pessoa
+ * pegou. A página precisa distinguir para pedir que recarregue, em vez de
+ * acusar o usuário de ter errado.
+ */
+function responderResultado(
+  res: http.ServerResponse,
+  resultado: { ok: true; agendamento: unknown } | { ok: false; motivo: string; detalhe: string },
+): void {
+  if (resultado.ok) {
+    responderJson(res, 200, { agendamento: resultado.agendamento });
+    return;
+  }
+
+  responderJson(res, resultado.motivo === 'conflito' ? 409 : 400, {
+    erro: resultado.detalhe,
+    motivo: resultado.motivo,
+  });
 }
 
 export function responderJson(res: http.ServerResponse, status: number, dados: unknown): void {

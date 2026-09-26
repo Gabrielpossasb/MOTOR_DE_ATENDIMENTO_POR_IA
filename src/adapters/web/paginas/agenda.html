@@ -1,0 +1,467 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Agenda</title>
+    <link rel="stylesheet" href="/estilo.css" />
+    <style>
+      body {
+        background: #f4f6f7;
+      }
+
+      .conteudo {
+        max-width: 960px;
+        margin: 0 auto;
+        padding: 20px 16px 64px;
+      }
+
+      h2 {
+        font-size: 15px;
+        margin: 26px 0 10px;
+      }
+
+      .cartao {
+        background: #fff;
+        border: 1px solid var(--borda);
+        border-radius: 10px;
+        padding: 14px 16px;
+      }
+
+      .campos {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+        gap: 10px;
+      }
+
+      .campo {
+        display: flex;
+        flex-direction: column;
+        gap: 3px;
+      }
+
+      .campo.largo {
+        grid-column: 1 / -1;
+      }
+
+      .campo label {
+        font-size: 11.5px;
+        font-weight: 600;
+        color: var(--texto-fraco);
+      }
+
+      input[type='text'],
+      input[type='date'],
+      select {
+        font: inherit;
+        font-size: 13.5px;
+        padding: 6px 9px;
+        border: 1px solid var(--borda);
+        border-radius: 6px;
+        background: #fff;
+        color: var(--texto);
+        width: 100%;
+      }
+
+      input:focus,
+      select:focus {
+        outline: 2px solid rgba(7, 94, 84, 0.25);
+        outline-offset: -1px;
+      }
+
+      button {
+        font: inherit;
+        font-size: 13px;
+        padding: 7px 13px;
+        border-radius: 7px;
+        border: 1px solid var(--borda);
+        background: #fff;
+        color: var(--texto);
+        cursor: pointer;
+      }
+
+      button:hover:not(:disabled) {
+        background: #f0f2f3;
+      }
+
+      button:disabled {
+        opacity: 0.5;
+        cursor: default;
+      }
+
+      button.primario {
+        background: var(--verde-escuro);
+        border-color: var(--verde-escuro);
+        color: #fff;
+        font-weight: 600;
+      }
+
+      button.primario:hover:not(:disabled) {
+        background: #064c44;
+      }
+
+      button.mini {
+        font-size: 12px;
+        padding: 4px 9px;
+      }
+
+      button.perigo {
+        color: var(--vermelho);
+      }
+
+      .linha {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 8px;
+        margin-top: 12px;
+      }
+
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        background: #fff;
+        border: 1px solid var(--borda);
+        border-radius: 10px;
+        overflow: hidden;
+        font-size: 13.5px;
+      }
+
+      th,
+      td {
+        text-align: left;
+        padding: 9px 12px;
+        border-bottom: 1px solid var(--borda);
+        vertical-align: middle;
+      }
+
+      th {
+        background: #fafafa;
+        font-size: 12px;
+        color: var(--texto-fraco);
+        text-transform: uppercase;
+        letter-spacing: 0.03em;
+      }
+
+      tr:last-child td {
+        border-bottom: 0;
+      }
+
+      tr.cancelado td {
+        color: var(--texto-fraco);
+        text-decoration: line-through;
+      }
+
+      .etiqueta {
+        display: inline-block;
+        font-size: 11px;
+        padding: 2px 8px;
+        border-radius: 10px;
+        font-weight: 600;
+      }
+
+      .etiqueta.scheduled {
+        background: #e7f6ec;
+        color: #16794a;
+      }
+
+      .etiqueta.cancelled {
+        background: #eee;
+        color: #555;
+      }
+
+      .quando {
+        font-variant-numeric: tabular-nums;
+        white-space: nowrap;
+      }
+
+      .vazio {
+        padding: 18px;
+        color: var(--texto-fraco);
+        font-size: 13.5px;
+        background: #fff;
+        border: 1px solid var(--borda);
+        border-radius: 10px;
+      }
+
+      .aviso {
+        border-radius: 9px;
+        padding: 11px 14px;
+        font-size: 13px;
+        margin-bottom: 14px;
+        line-height: 1.55;
+      }
+
+      .aviso.erro {
+        background: #fdeceb;
+        border: 1px solid #f5c2c0;
+        color: #7a1c15;
+      }
+
+      .aviso.info {
+        background: #e7f6ec;
+        border: 1px solid #bfe6cd;
+        color: #16794a;
+      }
+
+      .rodape {
+        margin-top: 26px;
+        font-size: 12px;
+        color: var(--texto-fraco);
+        line-height: 1.65;
+      }
+
+      .rodape code {
+        background: #eceff0;
+        padding: 1px 5px;
+        border-radius: 4px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="cabecalho">
+      <div>
+        <h1 id="titulo">Agenda</h1>
+        <div class="sub" id="subtitulo">carregando…</div>
+      </div>
+      <div class="navegacao">
+        <a href="/">Conversa</a>
+        <a href="/testes">Testes</a>
+        <a href="/painel">Painel</a>
+      </div>
+    </div>
+
+    <div class="conteudo">
+      <div id="mensagens"></div>
+
+      <h2>Marcar</h2>
+      <div class="cartao">
+        <div class="campos">
+          <div class="campo">
+            <label for="data">data</label>
+            <input type="date" id="data" />
+          </div>
+          <div class="campo">
+            <label for="hora">horário livre</label>
+            <select id="hora"><option value="">escolha a data primeiro</option></select>
+          </div>
+          <div class="campo">
+            <label for="servico">procedimento</label>
+            <input type="text" id="servico" placeholder="limpeza, avaliação…" />
+          </div>
+          <div class="campo">
+            <label for="nome">nome completo</label>
+            <input type="text" id="nome" />
+          </div>
+          <div class="campo">
+            <label for="telefone">telefone</label>
+            <input type="text" id="telefone" />
+          </div>
+          <div class="campo">
+            <label for="convenio">convênio</label>
+            <input type="text" id="convenio" placeholder="se houver" />
+          </div>
+        </div>
+        <div class="linha">
+          <button class="primario" id="marcar" disabled>Marcar</button>
+          <span id="contagem-livres" style="font-size: 12px; color: var(--texto-fraco)"></span>
+        </div>
+      </div>
+
+      <h2>Próximos</h2>
+      <div id="lista"></div>
+
+      <div class="rodape">
+        Os horários vêm da grade configurada em <code>tenant.json</code>, no bloco
+        <code>agenda</code> — e não do <code>horarios.txt</code>, que é texto para o bot ler. Os
+        dois precisam concordar.<br />
+        Cancelar não apaga: o agendamento fica riscado na lista, e o horário volta a ficar livre.
+      </div>
+    </div>
+
+    <script>
+      const $ = (id) => document.getElementById(id);
+      const estado = { agendamentos: [], livres: [] };
+
+      function escapar(texto) {
+        const div = document.createElement('div');
+        div.textContent = texto == null ? '' : String(texto);
+        return div.innerHTML;
+      }
+
+      function mostrar(tipo, texto) {
+        $('mensagens').innerHTML = '<div class="aviso ' + tipo + '">' + escapar(texto) + '</div>';
+      }
+
+      function limparMensagens() {
+        $('mensagens').innerHTML = '';
+      }
+
+      /** 'YYYY-MM-DD HH:MM' -> '05/10 (seg) 09:00' */
+      function quando(inicio) {
+        const [data, hora] = inicio.split(' ');
+        const [ano, mes, dia] = data.split('-').map(Number);
+        const dias = ['dom', 'seg', 'ter', 'qua', 'qui', 'sex', 'sáb'];
+        const semana = dias[new Date(Date.UTC(ano, mes - 1, dia)).getUTCDay()];
+        return dia + '/' + String(mes).padStart(2, '0') + ' (' + semana + ') ' + hora;
+      }
+
+      function renderizar() {
+        const lista = estado.agendamentos;
+
+        $('lista').innerHTML =
+          lista.length === 0
+            ? '<div class="vazio">Nenhum agendamento daqui para a frente.</div>'
+            : '<table><thead><tr><th>Quando</th><th>Quem</th><th>Procedimento</th>' +
+              '<th>Contato</th><th>Status</th><th></th></tr></thead><tbody>' +
+              lista
+                .map(
+                  (a) =>
+                    '<tr class="' +
+                    (a.status === 'cancelled' ? 'cancelado' : '') +
+                    '"><td class="quando">' +
+                    escapar(quando(a.inicio)) +
+                    '</td><td>' +
+                    escapar(a.nome) +
+                    '</td><td>' +
+                    escapar(a.servico || '—') +
+                    '</td><td>' +
+                    escapar(a.telefone || a.contatoId) +
+                    '</td><td><span class="etiqueta ' +
+                    a.status +
+                    '">' +
+                    (a.status === 'scheduled' ? 'marcado' : 'cancelado') +
+                    '</span></td><td>' +
+                    (a.status === 'scheduled'
+                      ? '<button class="mini perigo" data-cancelar="' + a.id + '">Cancelar</button>'
+                      : '') +
+                    '</td></tr>',
+                )
+                .join('') +
+              '</tbody></table>';
+
+        for (const botao of $('lista').querySelectorAll('[data-cancelar]')) {
+          botao.addEventListener('click', () => cancelar(Number(botao.dataset.cancelar)));
+        }
+      }
+
+      async function carregar(data) {
+        try {
+          const url = '/api/agenda' + (data ? '?data=' + encodeURIComponent(data) : '');
+          const dados = await (await fetch(url)).json();
+
+          if (dados.erro) {
+            mostrar('erro', dados.erro);
+            return;
+          }
+
+          estado.agendamentos = dados.agendamentos;
+          $('subtitulo').textContent =
+            'agenda · consultas de ' + dados.duracaoMin + ' min';
+
+          if (dados.livres) {
+            estado.livres = dados.livres;
+            preencherHorarios();
+          }
+
+          renderizar();
+        } catch (erro) {
+          mostrar('erro', 'Falha ao carregar: ' + erro.message);
+        }
+      }
+
+      function preencherHorarios() {
+        const select = $('hora');
+        select.innerHTML = '';
+
+        if (estado.livres.length === 0) {
+          select.innerHTML = '<option value="">nenhum horário livre nesse dia</option>';
+          $('contagem-livres').textContent = '';
+          $('marcar').disabled = true;
+          return;
+        }
+
+        for (const slot of estado.livres) {
+          const opcao = document.createElement('option');
+          opcao.value = slot.inicio;
+          opcao.textContent = slot.hora;
+          select.appendChild(opcao);
+        }
+
+        $('contagem-livres').textContent = estado.livres.length + ' horários livres';
+        $('marcar').disabled = false;
+      }
+
+      async function marcar() {
+        limparMensagens();
+        $('marcar').disabled = true;
+
+        try {
+          const resposta = await fetch('/api/agenda', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              inicio: $('hora').value,
+              nome: $('nome').value,
+              servico: $('servico').value,
+              telefone: $('telefone').value,
+              convenio: $('convenio').value,
+            }),
+          });
+          const dados = await resposta.json();
+
+          if (!resposta.ok) {
+            // 409 é conflito: o horário estava livre quando a tela carregou e
+            // outra pessoa pegou. Não é erro de quem preencheu.
+            mostrar(
+              'erro',
+              resposta.status === 409
+                ? dados.erro + ' — recarreguei os horários, escolha outro.'
+                : dados.erro,
+            );
+            if (resposta.status === 409) await carregar($('data').value);
+            $('marcar').disabled = false;
+            return;
+          }
+
+          mostrar('info', 'Marcado para ' + quando(dados.agendamento.inicio) + '.');
+          $('nome').value = '';
+          $('telefone').value = '';
+          $('convenio').value = '';
+          $('servico').value = '';
+          await carregar($('data').value);
+        } catch (erro) {
+          mostrar('erro', 'Falha ao marcar: ' + erro.message);
+          $('marcar').disabled = false;
+        }
+      }
+
+      async function cancelar(id) {
+        const alvo = estado.agendamentos.find((a) => a.id === id);
+        if (!confirm('Cancelar a consulta de ' + (alvo ? alvo.nome : '') + '?')) return;
+
+        limparMensagens();
+
+        try {
+          const resposta = await fetch('/api/agenda?id=' + id, { method: 'DELETE' });
+          const dados = await resposta.json();
+
+          if (!resposta.ok) {
+            mostrar('erro', dados.erro);
+            return;
+          }
+
+          mostrar('info', 'Cancelado. O horário voltou a ficar livre.');
+          await carregar($('data').value);
+        } catch (erro) {
+          mostrar('erro', 'Falha ao cancelar: ' + erro.message);
+        }
+      }
+
+      $('data').addEventListener('change', () => carregar($('data').value));
+      $('marcar').addEventListener('click', marcar);
+
+      carregar();
+    </script>
+  </body>
+</html>

@@ -9,6 +9,30 @@
 export interface ConfigDoTenant {
   topK?: number;
   limiarDeConfianca?: number;
+  agenda?: ConfigDaAgenda;
+}
+
+/**
+ * Agenda do cliente, em dado estruturado.
+ *
+ * Fica no tenant.json e NÃO nos documentos de propósito: o .txt de horários é
+ * texto para o RAG ler em voz alta, e agenda precisa de algo que dê para
+ * calcular. Os dois vão existir em paralelo e precisam concordar — se o
+ * documento disser que abre sábado e isto aqui não, o bot informa um horário
+ * que não consegue marcar.
+ */
+export interface ConfigDaAgenda {
+  /** Minutos por consulta. Define a grade de horários. */
+  duracaoMin: number;
+  /**
+   * Janelas de funcionamento por dia da semana (0 = domingo).
+   * Dia ausente ou lista vazia = fechado. Duas janelas cobrem o almoço.
+   */
+  janelas: Record<string, [string, string][]>;
+  /** Antecedência mínima para marcar, em horas. Evita marcar para daqui a 5min. */
+  antecedenciaMinimaHoras: number;
+  /** Até quantos dias à frente aceita marcar. */
+  diasNoFuturo: number;
 }
 
 export interface Tenant {

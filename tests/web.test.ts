@@ -241,6 +241,111 @@ describe('POST /api/conversa/reiniciar', () => {
   });
 });
 
+describe('agenda', () => {
+  /** Segunda-feira longe o bastante para caber em qualquer horizonte. */
+  const SEGUNDA = proximaSegunda();
+
+  function proximaSegunda(): string {
+    const d = new Date();
+    d.setDate(d.getDate() + ((8 - d.getDay()) % 7 || 7));
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  }
+
+  function marcar(corpoDaRequisicao: Record<string, unknown>): Promise<Response> {
+    return fetch(`${base}/api/agenda`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(corpoDaRequisicao),
+    });
+  }
+
+  it('lista os horários livres do dia pedido', async () => {
+    const dados = await corpo<{ livres: { hora: string }[]; duracaoMin: number }>(
+      await fetch(`${base}/api/agenda?data=${SEGUNDA}`),
+    );
+
+    expect(dados.duracaoMin).toBeGreaterThan(0);
+    expect(dados.livres.map((s) => s.hora)).toContain('09:00');
+  });
+
+  it('marca e devolve o agendamento', async () => {
+    const resposta = await marcar({
+      inicio: `${SEGUNDA} 09:00`,
+      nome: 'Maria Silva',
+      servico: 'limpeza',
+    });
+    const dados = await corpo<{ agendamento: { nome: string; inicio: string } }>(resposta);
+
+    expect(resposta.status).toBe(200);
+    expect(dados.agendamento.nome).toBe('Maria Silva');
+    expect(dados.agendamento.inicio).toBe(`${SEGUNDA} 09:00`);
+  });
+
+  it('responde 409 na dupla marcação, e não 400', async () => {
+    // Conflito não é erro de quem preencheu: o horário estava livre quando a
+    // tela carregou. A página usa o status para pedir que recarregue, em vez
+    // de acusar o usuário.
+    await marcar({ inicio: `${SEGUNDA} 10:00`, nome: 'Maria' });
+    const segunda = await marcar({ inicio: `${SEGUNDA} 10:00`, nome: 'João' });
+
+    expect(segunda.status).toBe(409);
+    expect((await corpo<{ motivo: string }>(segunda)).motivo).toBe('conflito');
+  });
+
+  it('responde 400 com o motivo quando o horário não existe na grade', async () => {
+    const resposta = await marcar({ inicio: `${SEGUNDA} 12:00`, nome: 'Maria' });
+
+    expect(resposta.status).toBe(400);
+    expect((await corpo<{ motivo: string }>(resposta)).motivo).toBe('fora_do_horario');
+  });
+
+  it('o horário some dos livres depois de marcado e volta ao cancelar', async () => {
+    const criado = await corpo<{ agendamento: { id: number } }>(
+      await marcar({ inicio: `${SEGUNDA} 11:00`, nome: 'Maria' }),
+    );
+
+    const ocupado = await corpo<{ livres: { hora: string }[] }>(
+      await fetch(`${base}/api/agenda?data=${SEGUNDA}`),
+    );
+    expect(ocupado.livres.map((s) => s.hora)).not.toContain('11:00');
+
+    await fetch(`${base}/api/agenda?id=${criado.agendamento.id}`, { method: 'DELETE' });
+
+    const livre = await corpo<{ livres: { hora: string }[] }>(
+      await fetch(`${base}/api/agenda?data=${SEGUNDA}`),
+    );
+    expect(livre.livres.map((s) => s.hora)).toContain('11:00');
+  });
+
+  it('altera o horário', async () => {
+    const criado = await corpo<{ agendamento: { id: number } }>(
+      await marcar({ inicio: `${SEGUNDA} 14:00`, nome: 'Maria' }),
+    );
+
+    const resposta = await fetch(`${base}/api/agenda`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: criado.agendamento.id, inicio: `${SEGUNDA} 15:00` }),
+    });
+
+    expect(resposta.status).toBe(200);
+    expect((await corpo<{ agendamento: { inicio: string } }>(resposta)).agendamento.inicio).toBe(
+      `${SEGUNDA} 15:00`,
+    );
+  });
+
+  it('recusa id inválido em alterar e cancelar', async () => {
+    expect((await fetch(`${base}/api/agenda?id=abc`, { method: 'DELETE' })).status).toBe(400);
+
+    const semId = await fetch(`${base}/api/agenda`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ inicio: `${SEGUNDA} 15:00` }),
+    });
+    expect(semId.status).toBe(400);
+  });
+});
+
 describe('bateria de testes', () => {
   function rodarTestes(perguntas: unknown): Promise<Response> {
     return fetch(`${base}/api/testes/rodar`, {
@@ -361,6 +466,13 @@ describe('arquivos estáticos', () => {
 
   it('serve o painel', async () => {
     expect((await fetch(`${base}/painel`)).status).toBe(200);
+  });
+
+  it('serve a agenda', async () => {
+    const resposta = await fetch(`${base}/agenda`);
+
+    expect(resposta.status).toBe(200);
+    expect(await resposta.text()).toContain('<title>Agenda</title>');
   });
 
   it('serve a bateria de testes', async () => {
