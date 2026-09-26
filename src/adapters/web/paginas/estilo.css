@@ -64,3 +64,32 @@ a {
 .cabecalho a:hover {
   background: rgba(255, 255, 255, 0.12);
 }
+
+/* Navegação entre as três páginas: conversa, testes e painel. */
+.cabecalho .navegacao {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* Botão no cabeçalho, com a mesma cara dos links de navegação. */
+.cabecalho .navegacao button {
+  font: inherit;
+  font-size: 13px;
+  color: #fff;
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.4);
+  border-radius: 6px;
+  padding: 6px 12px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.cabecalho .navegacao button:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.cabecalho .navegacao button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}

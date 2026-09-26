@@ -18,8 +18,17 @@ cp .env.example .env          # e preencha OPENAI_API_KEY
 npm run seed   -- clinica-sorriso   # cria o tenant a partir do tenant.json
 npm run ingest -- clinica-sorriso   # documentos -> chunks -> embeddings -> banco
 npm run cli    -- clinica-sorriso   # conversa no terminal
-npm run web    -- clinica-sorriso   # conversa e painel no navegador
+npm run web    -- clinica-sorriso   # conversa, bateria de testes e painel no navegador
 ```
+
+O `npm run web` sobe três páginas: `/` (conversa), `/testes` (bateria de testes:
+ver, editar e rodar as perguntas do `avaliacao.json` uma a uma, por grupo ou
+todas) e `/painel` (números).
+
+Na conversa, **Nova conversa** (ou **Ctrl+Shift+N**) encerra a conversa atual e
+começa outra do zero — para ir testando linguagem natural sem abrir aba nova, e
+para destravar uma conversa que caiu em handoff e deixou o bot mudo. Encerra sem
+apagar: o histórico continua alimentando o painel.
 
 Outros comandos:
 
@@ -132,13 +141,13 @@ src/
     rag/             # chunking, embeddings, vetores, busca
     llm/             # cliente do modelo e montagem dos prompts
     tenant/          # carga do tenant e config efetiva
-    conversation/    # janela de contexto da conversa
-    avaliacao/       # regras de acerto, logs e medição de estabilidade
+    conversation/    # janela de contexto e turno social (oi, obrigado, tchau)
+    avaliacao/       # regras de acerto, execução da suíte, arquivo, logs e estabilidade
     painel/          # números do painel (agregação é decisão, não formatação)
   storage/           # SQLite: conexão, migrations e repositórios
   adapters/
     cli/             # simulador no terminal (a borda que conhece o terminal)
-    web/             # servidor HTTP, conversa e painel (a borda que conhece HTTP)
+    web/             # servidor HTTP: conversa, testes e painel (a borda que conhece HTTP)
   scripts/           # seed, ingestão, calibração, avaliação e relatório
 data/tenants/<slug>/ # documentos + tenant.json + avaliacao.json (_ = não ingerido)
 logs/                # histórico das avaliações (versionado de propósito)
@@ -153,6 +162,11 @@ Estão em `src/core/llm/prompts.ts` e valem para todo tenant:
 2. Sem chunk relevante (ou confiança abaixo do limiar): responde que vai chamar
    alguém da equipe. Nesse caso o LLM nem é chamado — não se paga por uma
    resposta que já se sabe que não existe.
+   **Exceção:** saudação, agradecimento, despedida e confirmação ("oi",
+   "obrigado", "tchau", "ok") nem chegam na busca. São turno social, respondidos
+   com um prompt próprio, sem contexto e sem acionar ninguém — senão o bot
+   chamaria um atendente para retribuir um "boa tarde", e ficaria mudo pelo
+   resto da conversa.
 3. Nunca inventa preço, prazo, horário ou disponibilidade.
 4. No máximo 3 linhas, cortadas no código se o modelo passar.
 5. Uma mensagem por resposta.
@@ -280,10 +294,10 @@ falta e por que cada decisão foi tomada. Atualizado ao fim de cada etapa.
 
 **As 4 etapas da fase local estão prontas.** Ingestão, busca, CLI, estado de
 conversa com janela de contexto, handoff persistido, contabilidade de custo por
-mensagem, adaptador web com painel, suíte de avaliação com logs e medição de
-estabilidade.
+mensagem, adaptador web com painel e bateria de testes, suíte de avaliação com
+logs e medição de estabilidade.
 
-142 testes unitários offline. Última medição: **100% de acurácia e 100% de
+267 testes unitários offline. Última medição: **100% de acurácia e 100% de
 estabilidade** em 5 rodadas consecutivas.
 
 **Próximo passo natural:** trocar os documentos da clínica fictícia pelos de um

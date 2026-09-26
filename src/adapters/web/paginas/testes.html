@@ -1,0 +1,1048 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Bateria de testes</title>
+    <link rel="stylesheet" href="/estilo.css" />
+    <style>
+      body {
+        background: #f4f6f7;
+      }
+
+      .conteudo {
+        max-width: 1000px;
+        margin: 0 auto;
+        padding: 16px 16px 64px;
+      }
+
+      /* Barra de ações: fica visível ao rolar uma lista longa de perguntas. */
+      .acoes {
+        position: sticky;
+        top: 0;
+        z-index: 5;
+        background: #f4f6f7;
+        border-bottom: 1px solid var(--borda);
+        padding: 12px 0;
+        margin-bottom: 16px;
+      }
+
+      .linha {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 8px;
+      }
+
+      .linha + .linha {
+        margin-top: 8px;
+      }
+
+      button {
+        font: inherit;
+        font-size: 13px;
+        padding: 7px 13px;
+        border-radius: 7px;
+        border: 1px solid var(--borda);
+        background: #fff;
+        color: var(--texto);
+        cursor: pointer;
+      }
+
+      button:hover:not(:disabled) {
+        background: #f0f2f3;
+      }
+
+      button:disabled {
+        opacity: 0.5;
+        cursor: default;
+      }
+
+      button.primario {
+        background: var(--verde-escuro);
+        border-color: var(--verde-escuro);
+        color: #fff;
+        font-weight: 600;
+      }
+
+      button.primario:hover:not(:disabled) {
+        background: #064c44;
+      }
+
+      button.perigo {
+        color: var(--vermelho);
+      }
+
+      button.mini {
+        font-size: 12px;
+        padding: 4px 9px;
+      }
+
+      .rotulo-grupo {
+        font-size: 12px;
+        color: var(--texto-fraco);
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+        margin-right: 2px;
+      }
+
+      /* Resumo da rodada */
+      .resumo {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+        gap: 10px;
+        margin-bottom: 16px;
+      }
+
+      .resumo .cartao {
+        background: #fff;
+        border: 1px solid var(--borda);
+        border-radius: 10px;
+        padding: 10px 13px;
+      }
+
+      .resumo .rotulo {
+        font-size: 11px;
+        color: var(--texto-fraco);
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+      }
+
+      .resumo .valor {
+        font-size: 21px;
+        font-weight: 600;
+        margin-top: 3px;
+        font-variant-numeric: tabular-nums;
+      }
+
+      /* Cartão de pergunta */
+      .pergunta {
+        background: #fff;
+        border: 1px solid var(--borda);
+        border-left: 3px solid var(--borda);
+        border-radius: 10px;
+        padding: 11px 14px;
+        margin-bottom: 9px;
+      }
+
+      .pergunta.ok {
+        border-left-color: var(--verde-claro);
+      }
+
+      .pergunta.falhou {
+        border-left-color: var(--vermelho);
+      }
+
+      .pergunta.rodando {
+        border-left-color: #f0a30a;
+      }
+
+      .topo {
+        display: flex;
+        align-items: center;
+        gap: 9px;
+        flex-wrap: wrap;
+      }
+
+      .topo code {
+        font-size: 12.5px;
+        background: #f2f4f5;
+        padding: 2px 7px;
+        border-radius: 5px;
+      }
+
+      .espaco {
+        flex: 1;
+      }
+
+      .texto-pergunta {
+        margin: 7px 0 0 25px;
+        font-size: 14.5px;
+      }
+
+      .etiqueta {
+        display: inline-block;
+        font-size: 11px;
+        padding: 2px 8px;
+        border-radius: 10px;
+        font-weight: 600;
+        white-space: nowrap;
+      }
+
+      .etiqueta.responder {
+        background: #e7f6ec;
+        color: #16794a;
+      }
+
+      .etiqueta.recusar {
+        background: var(--amarelo);
+        color: #7a5b00;
+      }
+
+      .etiqueta.livre {
+        background: #eee;
+        color: #555;
+      }
+
+      .estado {
+        font-size: 12px;
+        font-weight: 600;
+      }
+
+      .estado.ok {
+        color: #16794a;
+      }
+
+      .estado.falhou {
+        color: var(--vermelho);
+      }
+
+      .estado.rodando,
+      .estado.fila {
+        color: #8a6100;
+      }
+
+      .estado.vazio {
+        color: var(--texto-fraco);
+        font-weight: 400;
+      }
+
+      /* Editor */
+      .editor {
+        margin: 11px 0 0 25px;
+        padding-top: 11px;
+        border-top: 1px dashed var(--borda);
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+        gap: 10px;
+      }
+
+      .campo {
+        display: flex;
+        flex-direction: column;
+        gap: 3px;
+      }
+
+      .campo.largo {
+        grid-column: 1 / -1;
+      }
+
+      /*
+       * Sem `text-transform: uppercase` aqui, de propósito: estes rótulos são os
+       * nomes REAIS dos campos do avaliacao.json. "FONTEESPERADA" esconderia o
+       * camelCase que a pessoa precisa digitar se for editar o arquivo à mão.
+       */
+      .campo label {
+        font-size: 11.5px;
+        font-weight: 600;
+        color: var(--texto-fraco);
+      }
+
+      .campo .ajuda {
+        font-size: 11.5px;
+        font-weight: 400;
+        color: var(--texto-fraco);
+      }
+
+      input[type='text'],
+      textarea,
+      select {
+        font: inherit;
+        font-size: 13.5px;
+        padding: 6px 9px;
+        border: 1px solid var(--borda);
+        border-radius: 6px;
+        background: #fff;
+        color: var(--texto);
+        width: 100%;
+      }
+
+      textarea {
+        resize: vertical;
+        line-height: 1.45;
+      }
+
+      input:focus,
+      textarea:focus,
+      select:focus {
+        outline: 2px solid rgba(7, 94, 84, 0.25);
+        outline-offset: -1px;
+      }
+
+      /* Resultado */
+      .resultado {
+        margin: 11px 0 0 25px;
+        padding-top: 10px;
+        border-top: 1px dashed var(--borda);
+        font-size: 13px;
+      }
+
+      .resultado .resposta {
+        background: var(--balao-bot);
+        border: 1px solid var(--borda);
+        border-radius: 8px;
+        padding: 8px 11px;
+        white-space: pre-wrap;
+        margin-bottom: 8px;
+      }
+
+      .resultado .falhas {
+        background: #fdeceb;
+        border: 1px solid #f5c2c0;
+        border-radius: 8px;
+        padding: 8px 11px;
+        margin-bottom: 8px;
+      }
+
+      .resultado .falhas li {
+        margin: 2px 0;
+      }
+
+      .resultado ul {
+        margin: 0;
+        padding-left: 18px;
+      }
+
+      .metricas {
+        color: var(--texto-fraco);
+        font-size: 12px;
+        font-variant-numeric: tabular-nums;
+      }
+
+      .fontes {
+        font-size: 12px;
+        color: var(--texto-fraco);
+        margin-top: 5px;
+      }
+
+      /* Avisos e erros */
+      .aviso {
+        border-radius: 9px;
+        padding: 11px 14px;
+        font-size: 13px;
+        margin-bottom: 14px;
+        line-height: 1.55;
+      }
+
+      .aviso.erro {
+        background: #fdeceb;
+        border: 1px solid #f5c2c0;
+        color: #7a1c15;
+      }
+
+      .aviso.atencao {
+        background: var(--amarelo);
+        border: 1px solid var(--amarelo-borda);
+        color: #6b5000;
+      }
+
+      .aviso.info {
+        background: #fff;
+        border: 1px solid var(--borda);
+        color: var(--texto-fraco);
+      }
+
+      .aviso ul {
+        margin: 6px 0 0;
+        padding-left: 20px;
+      }
+
+      .sujo {
+        font-size: 12px;
+        color: #8a6100;
+        font-weight: 600;
+      }
+
+      .rodape {
+        margin-top: 24px;
+        font-size: 12px;
+        color: var(--texto-fraco);
+        line-height: 1.65;
+      }
+
+      .rodape code {
+        background: #eceff0;
+        padding: 1px 5px;
+        border-radius: 4px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="cabecalho">
+      <div>
+        <h1 id="titulo">Bateria de testes</h1>
+        <div class="sub" id="subtitulo">carregando…</div>
+      </div>
+      <div class="navegacao">
+        <a href="/">Conversa</a>
+        <a href="/painel">Painel</a>
+      </div>
+    </div>
+
+    <div class="conteudo">
+      <div id="mensagens"></div>
+
+      <div class="acoes">
+        <div class="linha">
+          <button class="primario" id="rodar-selecionadas">Rodar selecionadas</button>
+          <button id="rodar-todas">Rodar todas</button>
+          <button id="parar" disabled>Parar</button>
+          <div class="espaco"></div>
+          <span class="sujo" id="indicador-sujo"></span>
+          <button id="salvar" disabled>Salvar perguntas</button>
+        </div>
+        <div class="linha">
+          <span class="rotulo-grupo">Selecionar</span>
+          <button class="mini" data-selecionar="todas">Todas</button>
+          <button class="mini" data-selecionar="nenhuma">Nenhuma</button>
+          <button class="mini" data-selecionar="responder">Deve responder</button>
+          <button class="mini" data-selecionar="recusar">Deve recusar</button>
+          <button class="mini" data-selecionar="falharam">Que falharam</button>
+          <div class="espaco"></div>
+          <button class="mini" id="nova">+ Nova pergunta</button>
+        </div>
+      </div>
+
+      <div class="resumo" id="resumo" hidden></div>
+
+      <div id="lista"></div>
+
+      <div class="rodape">
+        Cada pergunta rodada aqui é uma chamada real à API e <strong>custa dinheiro</strong>. A
+        contagem acima mostra o custo medido, não estimado.<br />
+        As perguntas vêm de <code id="caminho-arquivo">avaliacao.json</code>, e "Salvar perguntas"
+        reescreve esse arquivo — é o mesmo que o <code>npm run avaliar</code> lê.<br />
+        Rodar por aqui <strong>não grava em <code>logs/</code></strong>, de propósito: uma rodada
+        parcial registrada como execução faria a seção de regressões do relatório comparar 3
+        perguntas contra as 24 da suíte e acusar falhas que não existiram. Para registrar histórico,
+        use <code>npm run avaliar -- &lt;slug&gt;</code>.
+      </div>
+    </div>
+
+    <script>
+      const estado = {
+        perguntas: [],
+        /** Chave interna estável por pergunta: o id é editável, a chave não. */
+        chaves: [],
+        proximaChave: 1,
+        selecao: new Set(),
+        resultados: new Map(),
+        rodando: false,
+        pedidoDeParada: false,
+        sujo: false,
+        limiar: 0,
+        custoEstimado: 0.0005,
+      };
+
+      const $ = (id) => document.getElementById(id);
+
+      function escapar(texto) {
+        const div = document.createElement('div');
+        div.textContent = texto == null ? '' : String(texto);
+        return div.innerHTML;
+      }
+
+      function moeda(valor) {
+        return 'US$ ' + valor.toFixed(6);
+      }
+
+      function grupoDa(p) {
+        if (p.esperaHandoff === true) return { classe: 'recusar', texto: 'deve recusar' };
+        if (p.esperaHandoff === false) return { classe: 'responder', texto: 'deve responder' };
+        return { classe: 'livre', texto: 'sem expectativa' };
+      }
+
+      /** Só os campos que a API aceita, sem os vazios. */
+      function paraApi(p) {
+        const limpa = { id: (p.id || '').trim(), pergunta: (p.pergunta || '').trim() };
+        if (p.deveConter && p.deveConter.length > 0) limpa.deveConter = p.deveConter;
+        if (p.naoPodeConter && p.naoPodeConter.length > 0) limpa.naoPodeConter = p.naoPodeConter;
+        if (typeof p.esperaHandoff === 'boolean') limpa.esperaHandoff = p.esperaHandoff;
+        if (p.fonteEsperada && p.fonteEsperada.trim()) limpa.fonteEsperada = p.fonteEsperada.trim();
+        if (p.comentario && p.comentario.trim()) limpa.comentario = p.comentario.trim();
+        return limpa;
+      }
+
+      function marcarSujo() {
+        estado.sujo = true;
+        $('indicador-sujo').textContent = 'alterações não salvas';
+        $('salvar').disabled = false;
+      }
+
+      function marcarLimpo() {
+        estado.sujo = false;
+        $('indicador-sujo').textContent = '';
+        $('salvar').disabled = true;
+      }
+
+      function mostrarMensagem(tipo, titulo, itens) {
+        const lista =
+          itens && itens.length > 0
+            ? '<ul>' + itens.map((i) => '<li>' + escapar(i) + '</li>').join('') + '</ul>'
+            : '';
+        $('mensagens').innerHTML =
+          '<div class="aviso ' + tipo + '"><strong>' + escapar(titulo) + '</strong>' + lista + '</div>';
+      }
+
+      function limparMensagens() {
+        $('mensagens').innerHTML = '';
+      }
+
+      // --- Renderização ----------------------------------------------------
+
+      function renderizar() {
+        const lista = $('lista');
+        lista.innerHTML = '';
+
+        if (estado.perguntas.length === 0) {
+          lista.innerHTML =
+            '<div class="aviso info">Nenhuma pergunta ainda. Clique em "+ Nova pergunta" para escrever a primeira.</div>';
+          atualizarBotoes();
+          return;
+        }
+
+        estado.perguntas.forEach((p, i) => lista.appendChild(cartao(p, estado.chaves[i])));
+        atualizarBotoes();
+      }
+
+      function cartao(p, chave) {
+        const grupo = grupoDa(p);
+        const artigo = document.createElement('article');
+        artigo.className = 'pergunta';
+        artigo.dataset.chave = chave;
+
+        artigo.innerHTML =
+          '<div class="topo">' +
+          '<input type="checkbox" class="marcar" />' +
+          '<code class="id-visivel"></code>' +
+          '<span class="etiqueta ' +
+          grupo.classe +
+          '">' +
+          grupo.texto +
+          '</span>' +
+          '<span class="estado vazio">não rodou</span>' +
+          '<div class="espaco"></div>' +
+          '<button class="mini rodar-uma">Rodar</button>' +
+          '<button class="mini editar">Editar</button>' +
+          '<button class="mini perigo excluir">Excluir</button>' +
+          '</div>' +
+          '<div class="texto-pergunta"></div>' +
+          '<div class="editor" hidden></div>' +
+          '<div class="resultado" hidden></div>';
+
+        // textContent e não innerHTML: o texto é do usuário.
+        artigo.querySelector('.id-visivel').textContent = p.id || '(sem id)';
+        artigo.querySelector('.texto-pergunta').textContent = p.pergunta || '(sem pergunta)';
+
+        const marcar = artigo.querySelector('.marcar');
+        marcar.checked = estado.selecao.has(chave);
+        marcar.addEventListener('change', () => {
+          if (marcar.checked) estado.selecao.add(chave);
+          else estado.selecao.delete(chave);
+          atualizarBotoes();
+        });
+
+        artigo.querySelector('.rodar-uma').addEventListener('click', () => rodar([chave]));
+        artigo.querySelector('.excluir').addEventListener('click', () => excluir(chave));
+
+        const editor = artigo.querySelector('.editor');
+        artigo.querySelector('.editar').addEventListener('click', () => {
+          if (editor.hidden) {
+            montarEditor(editor, p, artigo);
+            editor.hidden = false;
+          } else {
+            editor.hidden = true;
+          }
+        });
+
+        const resultado = estado.resultados.get(chave);
+        if (resultado) aplicarResultado(artigo, resultado);
+
+        return artigo;
+      }
+
+      function campo(rotulo, ajuda) {
+        const div = document.createElement('div');
+        div.className = 'campo';
+        const label = document.createElement('label');
+        label.textContent = rotulo;
+        if (ajuda) {
+          const span = document.createElement('span');
+          span.className = 'ajuda';
+          span.textContent = ajuda;
+          label.appendChild(document.createTextNode(' '));
+          label.appendChild(span);
+        }
+        div.appendChild(label);
+        return div;
+      }
+
+      function montarEditor(editor, p, artigo) {
+        editor.innerHTML = '';
+
+        const texto = (rotulo, ajuda, valor, aoMudar, largo) => {
+          const div = campo(rotulo, ajuda);
+          if (largo) div.className = 'campo largo';
+          const input = document.createElement('input');
+          input.type = 'text';
+          input.value = valor || '';
+          input.addEventListener('input', () => {
+            aoMudar(input.value);
+            marcarSujo();
+          });
+          div.appendChild(input);
+          editor.appendChild(div);
+          return input;
+        };
+
+        const area = (rotulo, ajuda, valor, aoMudar, linhas, largo) => {
+          const div = campo(rotulo, ajuda);
+          if (largo) div.className = 'campo largo';
+          const ta = document.createElement('textarea');
+          ta.rows = linhas || 3;
+          ta.value = valor || '';
+          ta.addEventListener('input', () => {
+            aoMudar(ta.value);
+            marcarSujo();
+          });
+          div.appendChild(ta);
+          editor.appendChild(div);
+        };
+
+        texto(
+          'id',
+          '— chave nos relatórios',
+          p.id,
+          (v) => {
+            p.id = v;
+            artigo.querySelector('.id-visivel').textContent = v || '(sem id)';
+          },
+          false,
+        );
+
+        // Select de expectativa: é o campo que decide a qual GRUPO a pergunta
+        // pertence, e o grupo do meio (fala do negócio, resposta não existe na
+        // base) é o que mais importa calibrar.
+        const divSelect = campo('expectativa');
+        const select = document.createElement('select');
+        [
+          ['false', 'deve responder'],
+          ['true', 'deve recusar (handoff)'],
+          ['', 'não checar'],
+        ].forEach(([valor, rotulo]) => {
+          const opcao = document.createElement('option');
+          opcao.value = valor;
+          opcao.textContent = rotulo;
+          select.appendChild(opcao);
+        });
+        select.value = p.esperaHandoff === true ? 'true' : p.esperaHandoff === false ? 'false' : '';
+        select.addEventListener('change', () => {
+          if (select.value === '') delete p.esperaHandoff;
+          else p.esperaHandoff = select.value === 'true';
+
+          const grupo = grupoDa(p);
+          const etiqueta = artigo.querySelector('.etiqueta');
+          etiqueta.className = 'etiqueta ' + grupo.classe;
+          etiqueta.textContent = grupo.texto;
+          marcarSujo();
+        });
+        divSelect.appendChild(select);
+        editor.appendChild(divSelect);
+
+        texto('fonteEsperada', '— arquivo, ex: faq.md', p.fonteEsperada, (v) => {
+          p.fonteEsperada = v;
+        });
+
+        area(
+          'pergunta',
+          '— o que o cliente escreveria',
+          p.pergunta,
+          (v) => {
+            p.pergunta = v;
+            artigo.querySelector('.texto-pergunta').textContent = v || '(sem pergunta)';
+          },
+          2,
+          true,
+        );
+
+        area(
+          'deveConter',
+          '— um trecho por linha; todos precisam aparecer',
+          (p.deveConter || []).join('\n'),
+          (v) => {
+            p.deveConter = v
+              .split('\n')
+              .map((t) => t.trim())
+              .filter((t) => t.length > 0);
+          },
+          3,
+        );
+
+        area(
+          'naoPodeConter',
+          '— um trecho por linha; nenhum pode aparecer',
+          (p.naoPodeConter || []).join('\n'),
+          (v) => {
+            p.naoPodeConter = v
+              .split('\n')
+              .map((t) => t.trim())
+              .filter((t) => t.length > 0);
+          },
+          3,
+        );
+
+        area(
+          'comentario',
+          '— por que esta pergunta existe; aparece no relatório',
+          p.comentario,
+          (v) => {
+            p.comentario = v;
+          },
+          2,
+          true,
+        );
+      }
+
+      function artigoDa(chave) {
+        return $('lista').querySelector('[data-chave="' + chave + '"]');
+      }
+
+      function marcarEstado(chave, classe, texto) {
+        const artigo = artigoDa(chave);
+        if (!artigo) return;
+        const span = artigo.querySelector('.estado');
+        span.className = 'estado ' + classe;
+        span.textContent = texto;
+        artigo.className = 'pergunta' + (classe === 'ok' || classe === 'falhou' || classe === 'rodando' ? ' ' + classe : '');
+      }
+
+      function aplicarResultado(artigo, r) {
+        const alvo = artigo.querySelector('.resultado');
+        alvo.innerHTML = '';
+        alvo.hidden = false;
+
+        if (r.erro) {
+          const erro = document.createElement('div');
+          erro.className = 'falhas';
+          erro.textContent = 'Erro ao rodar: ' + r.erro;
+          alvo.appendChild(erro);
+          return;
+        }
+
+        const resposta = document.createElement('div');
+        resposta.className = 'resposta';
+        resposta.textContent = r.resposta && r.resposta.length > 0 ? r.resposta : '(resposta vazia)';
+        alvo.appendChild(resposta);
+
+        if (r.falhas && r.falhas.length > 0) {
+          const falhas = document.createElement('div');
+          falhas.className = 'falhas';
+          falhas.innerHTML =
+            '<strong>Por que falhou</strong><ul>' +
+            r.falhas
+              .map((f) => '<li><code>' + escapar(f.regra) + '</code>: ' + escapar(f.detalhe) + '</li>')
+              .join('') +
+            '</ul>';
+          alvo.appendChild(falhas);
+        }
+
+        const metricas = document.createElement('div');
+        metricas.className = 'metricas';
+        metricas.textContent =
+          'best_score ' +
+          r.melhorScore.toFixed(3) +
+          ' (limiar ' +
+          r.limiar +
+          ') · handoff: esperava ' +
+          (r.esperavaHandoff ? 'sim' : 'não') +
+          ', houve ' +
+          (r.houveHandoff ? 'sim' : 'não') +
+          ' · ' +
+          moeda(r.custoUsd) +
+          ' · ' +
+          r.latenciaMs +
+          ' ms · ' +
+          (r.tokensEntrada + r.tokensSaida) +
+          ' tokens';
+        alvo.appendChild(metricas);
+
+        const fontes = document.createElement('div');
+        fontes.className = 'fontes';
+        fontes.textContent =
+          r.fontes && r.fontes.length > 0
+            ? 'Fontes: ' +
+              r.fontes
+                .map(
+                  (f) =>
+                    f.arquivo + (f.secao ? ' › ' + f.secao : '') + ' (' + f.score.toFixed(3) + ')',
+                )
+                .join(' · ')
+            : 'Nenhuma fonte recuperada — barrado pelo limiar antes do LLM.';
+        alvo.appendChild(fontes);
+      }
+
+      // --- Resumo ----------------------------------------------------------
+
+      function atualizarResumo() {
+        const rodados = [...estado.resultados.values()].filter((r) => r && !r.erro);
+        const resumo = $('resumo');
+
+        if (rodados.length === 0) {
+          resumo.hidden = true;
+          return;
+        }
+
+        const passaram = rodados.filter((r) => r.passou).length;
+        const custo = rodados.reduce((s, r) => s + r.custoUsd, 0);
+        const latencia = Math.round(rodados.reduce((s, r) => s + r.latenciaMs, 0) / rodados.length);
+
+        const cartao = (rotulo, valor) =>
+          '<div class="cartao"><div class="rotulo">' +
+          rotulo +
+          '</div><div class="valor">' +
+          valor +
+          '</div></div>';
+
+        resumo.hidden = false;
+        resumo.innerHTML = [
+          cartao('Acurácia', ((passaram / rodados.length) * 100).toFixed(1) + '%'),
+          cartao('Passaram', passaram + '/' + rodados.length),
+          cartao('Custo medido', moeda(custo)),
+          cartao('Latência média', latencia + ' ms'),
+        ].join('');
+      }
+
+      function atualizarBotoes() {
+        const n = estado.selecao.size;
+        $('rodar-selecionadas').textContent =
+          'Rodar selecionadas (' +
+          n +
+          ')' +
+          (n > 0 ? ' · ~' + moeda(n * estado.custoEstimado) : '');
+        $('rodar-selecionadas').disabled = estado.rodando || n === 0;
+        $('rodar-todas').textContent =
+          'Rodar todas (' +
+          estado.perguntas.length +
+          ')' +
+          (estado.perguntas.length > 0
+            ? ' · ~' + moeda(estado.perguntas.length * estado.custoEstimado)
+            : '');
+        $('rodar-todas').disabled = estado.rodando || estado.perguntas.length === 0;
+        $('parar').disabled = !estado.rodando;
+        $('nova').disabled = estado.rodando;
+      }
+
+      // --- Execução --------------------------------------------------------
+
+      async function rodar(chaves) {
+        if (estado.rodando || chaves.length === 0) return;
+
+        limparMensagens();
+        estado.rodando = true;
+        estado.pedidoDeParada = false;
+        atualizarBotoes();
+
+        for (const chave of chaves) {
+          estado.resultados.delete(chave);
+          marcarEstado(chave, 'fila', 'na fila');
+        }
+
+        // Uma requisição por pergunta: o resultado aparece conforme sai, e
+        // "Parar" funciona de verdade. A API aceita uma lista, mas quem paceia
+        // é a página.
+        for (const chave of chaves) {
+          if (estado.pedidoDeParada) {
+            marcarEstado(chave, 'vazio', 'não rodou');
+            continue;
+          }
+
+          const indice = estado.chaves.indexOf(chave);
+          if (indice === -1) continue;
+
+          marcarEstado(chave, 'rodando', 'rodando…');
+
+          let resultado;
+          try {
+            const resposta = await fetch('/api/testes/rodar', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ perguntas: [paraApi(estado.perguntas[indice])] }),
+            });
+            const dados = await resposta.json();
+
+            if (!resposta.ok) {
+              resultado = { erro: (dados.erros || [dados.erro || 'falhou']).join(' · ') };
+            } else {
+              resultado = dados.resultados[0];
+            }
+          } catch (erro) {
+            resultado = { erro: erro.message };
+          }
+
+          estado.resultados.set(chave, resultado);
+
+          const artigo = artigoDa(chave);
+          if (artigo) aplicarResultado(artigo, resultado);
+
+          if (resultado.erro) marcarEstado(chave, 'falhou', 'erro');
+          else marcarEstado(chave, resultado.passou ? 'ok' : 'falhou', resultado.passou ? 'passou' : 'FALHOU');
+
+          atualizarResumo();
+        }
+
+        estado.rodando = false;
+        atualizarBotoes();
+      }
+
+      // --- Seleção, criação, exclusão --------------------------------------
+
+      function selecionar(quais) {
+        estado.selecao.clear();
+
+        estado.perguntas.forEach((p, i) => {
+          const chave = estado.chaves[i];
+          const resultado = estado.resultados.get(chave);
+
+          const entra =
+            quais === 'todas' ||
+            (quais === 'responder' && p.esperaHandoff === false) ||
+            (quais === 'recusar' && p.esperaHandoff === true) ||
+            (quais === 'falharam' && resultado && (resultado.erro || !resultado.passou));
+
+          if (entra) estado.selecao.add(chave);
+        });
+
+        for (const artigo of $('lista').querySelectorAll('.pergunta')) {
+          artigo.querySelector('.marcar').checked = estado.selecao.has(Number(artigo.dataset.chave));
+        }
+
+        atualizarBotoes();
+      }
+
+      function nova() {
+        estado.perguntas.push({ id: '', pergunta: '', esperaHandoff: false });
+        estado.chaves.push(estado.proximaChave++);
+        marcarSujo();
+        renderizar();
+
+        // Abre o editor da nova, que nasce vazia e precisa ser preenchida.
+        const artigo = $('lista').lastElementChild;
+        artigo.querySelector('.editar').click();
+        artigo.scrollIntoView({ block: 'center', behavior: 'smooth' });
+        artigo.querySelector('input[type="text"]').focus();
+      }
+
+      function excluir(chave) {
+        const indice = estado.chaves.indexOf(chave);
+        if (indice === -1) return;
+
+        const p = estado.perguntas[indice];
+        if (!confirm('Excluir a pergunta "' + (p.id || 'sem id') + '"?')) return;
+
+        estado.perguntas.splice(indice, 1);
+        estado.chaves.splice(indice, 1);
+        estado.selecao.delete(chave);
+        estado.resultados.delete(chave);
+
+        marcarSujo();
+        renderizar();
+        atualizarResumo();
+      }
+
+      // --- Carregar e salvar -----------------------------------------------
+
+      async function carregar() {
+        try {
+          const dados = await (await fetch('/api/testes')).json();
+          if (dados.erro) {
+            mostrarMensagem('erro', dados.erro);
+            return;
+          }
+
+          $('titulo').textContent = dados.tenant.nome;
+          $('subtitulo').textContent =
+            'bateria de testes · ' + dados.modelo + ' · limiar ' + dados.limiar;
+          $('caminho-arquivo').textContent = dados.arquivo;
+
+          estado.limiar = dados.limiar;
+          estado.custoEstimado = dados.custoEstimadoPorPerguntaUsd;
+          estado.descricao = dados.descricao;
+          estado.perguntas = dados.perguntas;
+          estado.chaves = dados.perguntas.map(() => estado.proximaChave++);
+
+          renderizar();
+          marcarLimpo();
+
+          if (!dados.existe) {
+            mostrarMensagem(
+              'atencao',
+              'Este tenant ainda não tem ' + dados.arquivo + '. Salvar cria o arquivo.',
+            );
+          }
+        } catch (erro) {
+          mostrarMensagem('erro', 'Falha ao carregar: ' + erro.message);
+        }
+      }
+
+      async function salvar() {
+        limparMensagens();
+        $('salvar').disabled = true;
+
+        try {
+          const resposta = await fetch('/api/testes', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              descricao: estado.descricao,
+              perguntas: estado.perguntas.map(paraApi),
+            }),
+          });
+          const dados = await resposta.json();
+
+          if (!resposta.ok) {
+            mostrarMensagem('erro', 'Não salvei — corrija e tente de novo:', dados.erros || [dados.erro]);
+            $('salvar').disabled = false;
+            return;
+          }
+
+          marcarLimpo();
+
+          if (dados.avisos && dados.avisos.length > 0) {
+            mostrarMensagem(
+              'atencao',
+              'Salvei ' + dados.salvas + ' perguntas em ' + dados.arquivo + ', com avisos:',
+              dados.avisos,
+            );
+          } else {
+            mostrarMensagem('info', 'Salvei ' + dados.salvas + ' perguntas em ' + dados.arquivo + '.');
+          }
+        } catch (erro) {
+          mostrarMensagem('erro', 'Falha ao salvar: ' + erro.message);
+          $('salvar').disabled = false;
+        }
+      }
+
+      // --- Ligações --------------------------------------------------------
+
+      $('rodar-selecionadas').addEventListener('click', () => rodar([...estado.selecao]));
+      $('rodar-todas').addEventListener('click', () => rodar([...estado.chaves]));
+      $('parar').addEventListener('click', () => {
+        estado.pedidoDeParada = true;
+        $('parar').disabled = true;
+      });
+      $('salvar').addEventListener('click', salvar);
+      $('nova').addEventListener('click', nova);
+
+      for (const botao of document.querySelectorAll('[data-selecionar]')) {
+        botao.addEventListener('click', () => selecionar(botao.dataset.selecionar));
+      }
+
+      // Editar a suíte e fechar a aba sem salvar perderia o trabalho em silêncio.
+      window.addEventListener('beforeunload', (evento) => {
+        if (estado.sujo) evento.preventDefault();
+      });
+
+      carregar();
+    </script>
+  </body>
+</html>

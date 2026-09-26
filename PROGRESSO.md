@@ -3,7 +3,7 @@
 Arquivo vivo: atualizado ao fim de cada etapa. Serve para você acompanhar e
 para uma sessão nova retomar o trabalho sem precisar reconstruir o contexto.
 
-**Última atualização:** 2026-09-24, ao fim da Etapa 4.
+**Última atualização:** 2026-09-25, com a bateria de testes na web.
 **Estado:** todas as 4 etapas da fase local concluídas. A fase está pronta para
 receber os documentos de um cliente real e ser calibrada com perguntas de verdade.
 
@@ -38,7 +38,7 @@ Comandos de qualidade:
 | Comando | O que faz | Custo |
 |---|---|---|
 | `npm run novo-tenant -- <slug> "<Nome>"` | cria a pasta de um cliente novo com modelos | zero |
-| `npm test` | 154 testes unitários, offline | zero |
+| `npm test` | 267 testes unitários, offline | zero |
 | `npm run typecheck` | checagem de tipos | zero |
 | `npm run calibrar -- <slug>` | mede scores de busca para ajustar o limiar | ~US$ 0,000005 |
 | `npm run avaliar -- <slug>` | 24 perguntas contra a API real, gera logs | ~US$ 0,01 |
@@ -46,7 +46,7 @@ Comandos de qualidade:
 | `npm run relatorio` | histórico de todas as avaliações | zero |
 | `npm run relatorio -- <id>` | trajetória de uma pergunta | zero |
 | `npm run relatorio -- --instaveis` | perguntas que oscilam | zero |
-| `npm run web -- <slug>` | conversa em http://localhost:3000/ e painel em /painel | por mensagem |
+| `npm run web -- <slug>` | conversa em `/`, bateria de testes em `/testes` e painel em `/painel` | por mensagem |
 
 ---
 
@@ -123,7 +123,7 @@ Estado de conversa, handoff persistido, contabilidade e política de testes.
 **Dois tipos, separados de propósito.** Juntos os dois pioram: o determinístico
 fica lento e caro, o não-determinístico some no ruído.
 
-**`npm test`** — 154 testes unitários, offline, grátis, ~3s. Rode a cada
+**`npm test`** — 267 testes unitários, offline, grátis, ~3s. Rode a cada
 salvamento. Embedder e LLM são sempre dublês; **nenhum teste unitário toca a
 rede**. Um teste só entra se falha por *um* motivo nomeável, se o nome descreve
 comportamento (não implementação), e — quando nasce de bug real — traz comentário
@@ -383,6 +383,219 @@ para poderem ser importados por um teste sem disparar uma ingestão de verdade.
 próprio (0,424, calibrado) e 8 perguntas cobrindo as três famílias. Serve de
 exemplo e prova que o isolamento multi-tenant funciona com dado de verdade.
 Pode ser apagada sem afetar nada.
+
+---
+
+## Bateria de testes na web (2026-09-25)
+
+A suíte de avaliação só existia como comando: `npm run avaliar` rodava tudo, e
+para mexer numa pergunta era preciso abrir o `avaliacao.json` num editor. Agora
+`/testes` mostra as perguntas, deixa editá-las e rodar **uma, um grupo ou todas**.
+
+### Entregue
+- Página `/testes` no adaptador web: cada pergunta é um cartão com a expectativa
+  (deve responder / deve recusar), o veredito, a resposta completa, as regras que
+  quebraram, as fontes com scores, o `best_score`, o custo e a latência
+- Edição dos 7 campos do `avaliacao.json` na própria página, com "Salvar" que
+  reescreve o arquivo — o mesmo que o `npm run avaliar` lê
+- Seleção por grupo: todas, nenhuma, deve responder, deve recusar e
+  **as que falharam** (a que mais se usa: rodar de novo só o que quebrou)
+- Custo estimado no botão **antes** de rodar, custo medido depois
+- Botão "Parar", que interrompe entre uma pergunta e a seguinte
+- 35 testes novos (26 do arquivo/validação, 9 das rotas)
+
+### Decisões
+- **A execução de uma pergunta virou `core/avaliacao/suite.ts`.** Era código de
+  dentro do `avaliar.ts`. Com dois chamadores, uma cópia em cada lado deixaria a
+  página dizer "passou" onde a suíte diz "falhou" — e aí nenhum dos dois
+  serviria para calibrar. O `avaliar.ts` encolheu e agora só cuida do terminal.
+- **Rodar pela página NÃO grava em `logs/`.** Uma rodada parcial de 3 perguntas
+  registrada como execução faria o `relatorio` comparar 3 contra as 24 da suíte,
+  e a seção de regressões — a mais importante dos logs — acusaria 21 falhas que
+  nunca aconteceram. Quem registra histórico é o `npm run avaliar`.
+- **Uma requisição HTTP por pergunta**, mesmo a rota aceitando lista. É o que faz
+  o resultado aparecer conforme sai e o "Parar" funcionar de verdade.
+- **Roda sequencial**, como o script. Em paralelo as latências medidas viram
+  ficção e deixam de ser comparáveis com as do `npm run avaliar`.
+- **Campo desconhecido é erro, não é ignorado.** Escrever `deveConterr` com dois
+  r não afrouxaria a regra de um jeito visível: deixaria a pergunta passando sem
+  verificar nada. Um teste que passa à toa é pior que teste nenhum. Vale também
+  para o `npm run avaliar`, que agora lê o arquivo pelo mesmo validador.
+- **Gravação atômica** (escreve `.tmp` e renomeia): se o processo morrer no meio,
+  o `avaliacao.json` continua o antigo e válido em vez de virar meio arquivo.
+- **Id não pode conter `|`.** O id entra em tabela markdown nos relatórios; um
+  pipe no meio quebraria a tabela do `ESTABILIDADE.md` em silêncio.
+
+### Conferido rodando de verdade
+As 24 perguntas da clínica carregam na página, os grupos batem (9 "deve recusar"
++ 15 "deve responder"), e uma execução real de `horario-sabado` passou por
+US$ 0,000464 em 4,5s, com `best_score` 0,572 e as 4 fontes citadas com score.
+
+---
+
+## Turno social: o bot chamava um humano para responder "boa tarde" (2026-09-25)
+
+Achado conversando na página `/`: um **"boa tarde"** tirou **0,370** na busca,
+abaixo do limiar de 0,40, e o bot respondeu *"Não tenho essa informação aqui.
+Vou chamar alguém da equipe"*, registrou handoff e marcou a conversa.
+
+### Por que era pior do que parecia
+Três estragos, e o segundo é o grave:
+
+1. Um atendente é acionado para retribuir um cumprimento. No WhatsApp, a fila da
+   equipe encheria de "oi".
+2. **A conversa morre ali.** Como `bloquearBotAposHandoff` cala o bot depois de
+   um handoff, a pergunta de verdade — que viria na mensagem seguinte — nunca
+   seria respondida. Quem cumprimenta antes de perguntar não é atendido.
+3. `unanswered` enche de saudação, e é justamente a lista que diz qual documento
+   falta escrever.
+
+### Mexer no limiar não resolveria
+Com o limiar mais baixo, "boa tarde" iria ao LLM com contexto irrelevante — e a
+regra 2 do prompt manda responder **exatamente** a frase de handoff quando o
+contexto não responde. Mesmo resultado, agora pagando por ele. O problema nunca
+foi o número: era o motor ter só **dois modos** (responder pelos documentos ou
+chamar um humano) quando uma saudação não é nenhum dos dois.
+
+### Entregue: um terceiro modo
+- `src/core/conversation/turno-social.ts` classifica saudação, agradecimento,
+  despedida e confirmação. **Determinístico**: custo zero, latência zero,
+  testável offline. Sai antes da busca, então não gasta nem embedding.
+- Prompt próprio (`montarPromptSocial`), sem CONTEXTO e com a regra dura
+  invertida: não pode sair **nenhum** dado do negócio, porque qualquer um seria
+  inventado. Quem escreve a resposta é o LLM, então ela varia — não é frase
+  enlatada.
+- O histórico vai junto: é o que faz "boa noite" no fim de um atendimento ser
+  lido como despedida, e não como novo cumprimento.
+- 4 perguntas sociais no `avaliacao.json` da clínica, para calibrar em `/testes`.
+- 57 testes novos (49 do classificador, 8 do motor).
+
+### A regra que segura o classificador
+Só é turno social a mensagem em que **não sobra nada** depois de tirar as
+expressões sociais e o ruído. Por isso `"oi, quanto custa a limpeza?"` continua
+sendo pergunta e segue o caminho normal.
+
+O risco aqui é assimétrico: deixar passar uma saudação devolve o bug antigo, mas
+tratar uma **pergunta** como saudação é pior — o cliente pede preço e leva um
+"oi, tudo bem?". Por isso metade dos testes é sobre o que NÃO pode ser
+confundido: `"oito reais?"` não contém "oi", `"bolacha"` não contém "olá",
+`"até que horas vocês abrem?"` não é despedida (só as formas compostas — "até
+logo", "até mais" — entraram na lista; "até" sozinho ficou de fora).
+
+A promessa de escalar continua sendo detectada mesmo no caminho social: se o
+modelo desobedecer e prometer chamar alguém, alguém é chamado. Já aconteceu duas
+vezes neste projeto de essa promessa passar batida.
+
+### Medido contra a API real
+
+| Mensagem | Antes | Depois |
+|---|---|---|
+| `boa tarde` | handoff, equipe acionada | *"Boa tarde! Como posso te ajudar hoje?"* |
+| `obrigado!` | handoff | *"Eu que agradeço! Fico à disposição sempre que precisar"* |
+| `tchau, até mais` | handoff | *"Tchau! Até mais, e quando quiser, é só chamar"* |
+| `boa tarde, vocês abrem no sábado?` | handoff | *"Sim, abrimos aos sábados das 8h às 12h."* (score 0,516) |
+
+A conversa inteira do print refeita: `boa tarde` → `quanto custa a limpeza?` →
+`obrigado!` responde as três, a conversa fica `open` o tempo todo e **nenhuma
+entrada nova** aparece em `unanswered`. Custo das 4 perguntas: US$ 0,001055.
+
+### "Nova conversa": reiniciar rápido para ir testando
+
+Botão no cabeçalho da página de conversa (atalho **Ctrl+Shift+N**), para tentar
+uma conversa natural atrás da outra sem abrir aba nova.
+
+O mecanismo já existia: `closed` faz a próxima mensagem criar uma conversa do
+zero, sem histórico e sem herdar o status. O botão só marca a conversa atual
+como encerrada — mesmo contato, conversa nova.
+
+Dois detalhes que valem registrar:
+
+- **Fecha, não apaga.** O histórico é o que alimenta o painel e a lista de
+  buracos da base. Testar de novo não pode jogar fora o que o teste anterior
+  produziu.
+- **É a saída de uma conversa presa em handoff.** Depois de um handoff o bot
+  fica mudo de propósito, para não atropelar o atendente. Até agora o único
+  jeito de voltar a conversar era trocar de contato. Tem teste para isso.
+
+A decisão de encerrar mora no core (`encerrarConversa`), não no adaptador; a
+rota só traduz HTTP. De quebra, a busca pela conversa ativa, que estava embutida
+no `obterOuCriarConversa`, virou `conversaAtiva` e é usada pelos dois.
+
+### Limpeza dos handoffs falsos (feita)
+O banco local tinha 4 conversas travadas em `handoff`. Usando o próprio
+classificador novo para decidir o que era falso, só **uma** era — a do "boa
+tarde". As outras três eram legítimas (`pizza`, `botox`) e ficaram como estavam.
+A conversa foi encerrada e o "boa tarde" saiu da lista de `unanswered`, onde era
+ruído puro.
+
+### Fica em aberto
+- Mensagem vaga que não é social nem pergunta (`"preciso de ajuda"`, `"?"`)
+  ainda cai em handoff. Provavelmente certo, mas não foi medido.
+- Meta-perguntas (`"você é um robô?"`) também caem em handoff. A resposta certa
+  é decisão de produto de cada cliente, então ficou de fora.
+- Tirar a saudação da consulta antes de buscar (`"oi, quanto custa?"` →
+  `"quanto custa?"`) melhoraria o embedding. Não foi feito: o ganho é
+  especulativo e não dá para conferir sem gastar.
+
+---
+
+## Memória da conversa e busca com contexto (2026-09-26)
+
+Duas frentes que resolvem o mesmo problema: o cliente não pode ter de repetir o
+que já contou.
+
+### Memória compactada
+Quando a conversa passa de 8 mensagens, as antigas viram resumo em vez de
+sumirem da janela. A memória é cumulativa — o resumo anterior entra na
+compactação seguinte, senão a segunda esqueceria o começo.
+
+- Migration `002`: colunas `summary` e `summary_until_message_id` (marca
+  d'água) em `conversations`
+- `compactarSeNecessario` e `montarContextoDaConversa` no core
+- Com janela 8 e 4 preservadas, compacta a cada 3 turnos. Os tokens e o custo
+  dessa chamada entram no `uso` da resposta: custo reportado que ignora uma
+  chamada paga é ficção.
+
+**A regra que não pode cair:** o resumo NÃO copia preço, prazo ou horário que o
+BOT informou — registra que o assunto foi respondido, sem o número. Senão a
+memória vira fonte de verdade paralela: o bot responde de cabeça em vez de
+consultar os documentos, e a checagem de número inventado não pega, porque ela
+compara contra os chunks e não contra o resumo. Um preço corrigido no documento
+continuaria sendo repetido errado a conversa inteira. Número que o CLIENTE deu
+fica, porque é dado do atendimento.
+
+### A busca não via a conversa
+O LLM recebia o histórico; a busca, não. Uma pergunta que se apoia na anterior
+morria antes de chegar ao modelo — e como handoff cala o bot, a conversa
+inteira morria junto. Medido numa conversa real de 8 turnos: travou no turno 3
+e os turnos 4 a 8 vieram vazios.
+
+| consulta | score |
+|---|---|
+| `e o canal?` | **0,369** (barrado) |
+| `quanto custa um implante? e o canal?` | **0,672** |
+
+Conserto: quando o score fica abaixo do limiar e há conversa, refaz a busca com
+a pergunta anterior do cliente junto. Só roda quando a primeira falhou, e custa
+um embedding — não uma chamada ao modelo.
+
+### O que isso custou, medido
+A segunda tentativa enfraquece o filtro grátis de fora-de-assunto dentro de uma
+conversa:
+
+| `vocês vendem pizza?` | score | desfecho | custo |
+|---|---|---|---|
+| sozinho | 0,373 | handoff | US$ 0 |
+| depois de uma pergunta boa | 0,443 | handoff igual | US$ 0,000395 |
+
+O desfecho não muda — o modelo recusa. Só o custo. Trocar 0,04 centavo por
+conversa que morre é troca boa, então ficou sem filtro de intenção: um filtro
+por palavra-chave teria falso negativo justamente nas elípticas sem conectivo
+("tem desconto?"), que é o bug que se quer evitar.
+
+Isso quebrou um teste do painel que contava com o limiar barrar a pergunta ruim.
+O teste é do painel, não da recuperação — passou a controlar o handoff com um
+dublê próprio, e agora vale com ou sem a segunda tentativa.
 
 ---
 

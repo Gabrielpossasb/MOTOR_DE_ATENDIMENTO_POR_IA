@@ -103,6 +103,26 @@ export function ultimasMensagens(db: Db, conversaId: number, limite: number): Me
   return linhas.reverse().map(paraMensagem);
 }
 
+/**
+ * Mensagens posteriores a um id, em ordem cronológica.
+ *
+ * É o outro lado da marca d'água do resumo: o que ainda NÃO foi compactado e
+ * portanto precisa ir íntegro ao modelo. `apos = 0` traz a conversa inteira.
+ */
+export function mensagensApos(db: Db, conversaId: number, apos: number): MensagemGravada[] {
+  const linhas = db
+    .prepare(
+      `SELECT id, conversation_id, role, content, tokens_in, tokens_out,
+              estimated_cost_usd, latency_ms, sources, created_at
+       FROM messages
+       WHERE conversation_id = ? AND id > ?
+       ORDER BY id ASC`,
+    )
+    .all(conversaId, apos) as LinhaMensagem[];
+
+  return linhas.map(paraMensagem);
+}
+
 export function contarMensagens(db: Db, conversaId: number): number {
   const linha = db
     .prepare('SELECT COUNT(*) AS total FROM messages WHERE conversation_id = ?')

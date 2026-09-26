@@ -197,6 +197,142 @@ describe('Motor.responder', () => {
   });
 });
 
+describe('turno social', () => {
+  const DOCUMENTO = 'A clínica abre de segunda a sexta das oito às dezoito horas.';
+
+  /** Embedder que conta chamadas: um turno social não pode nem buscar. */
+  class EmbedderEspiao extends EmbedderFake {
+    chamadas = 0;
+
+    override async gerar(textos: string[]) {
+      this.chamadas += 1;
+      return super.gerar(textos);
+    }
+  }
+
+  it('NÃO chama a equipe por causa de um "boa tarde"', async () => {
+    // O caso real: "boa tarde" tirou 0.370 na busca, abaixo do limiar de 0.40,
+    // e virou handoff. Um atendente era acionado para responder a um
+    // cumprimento.
+    semear([DOCUMENTO]);
+    const motor = new Motor({
+      db,
+      embedder: new EmbedderFake(),
+      llm: new LlmFake('Boa tarde! Como posso ajudar você hoje?'),
+    });
+
+    const resposta = await motor.responder(SLUG, 'contato-1', 'boa tarde');
+
+    expect(resposta.precisaDeHumano).toBe(false);
+    expect(resposta.motivoDoHandoff).toBeUndefined();
+    expect(resposta.turnoSocial).toBe('saudacao');
+    expect(resposta.texto).toBe('Boa tarde! Como posso ajudar você hoje?');
+  });
+
+  it('deixa a conversa aberta, então a pergunta seguinte é respondida', async () => {
+    // A consequência mais grave do bug antigo: o handoff marcava a conversa e
+    // `bloquearBotAposHandoff` calava o bot. Quem dissesse "boa tarde" antes
+    // de perguntar nunca receberia resposta.
+    semear([DOCUMENTO]);
+    const motor = new Motor({
+      db,
+      embedder: new EmbedderFake(),
+      llm: new LlmFake('Boa tarde! Como posso ajudar?'),
+    });
+
+    await motor.responder(SLUG, 'contato-1', 'boa tarde');
+    const depois = await motor.responder(SLUG, 'contato-1', 'clínica abre segunda sexta horas');
+
+    expect(depois.aguardandoHumano).toBe(false);
+    expect(depois.texto.length).toBeGreaterThan(0);
+    expect(depois.fontes[0]?.arquivo).toBe('faq.md');
+  });
+
+  it('não registra pergunta sem resposta, que suja a lista de buracos da base', async () => {
+    // A lista de `unanswered` é o que diz qual documento falta escrever.
+    // "boa tarde" ali dentro é ruído puro.
+    semear([DOCUMENTO]);
+    const motor = new Motor({ db, embedder: new EmbedderFake(), llm: new LlmFake('Olá!') });
+
+    await motor.responder(SLUG, 'contato-1', 'boa tarde');
+
+    const total = db.prepare('SELECT COUNT(*) AS t FROM unanswered').get() as { t: number };
+    expect(total.t).toBe(0);
+  });
+
+  it('não busca nem gasta embedding', async () => {
+    semear([DOCUMENTO]);
+    const embedder = new EmbedderEspiao();
+    const motor = new Motor({ db, embedder, llm: new LlmFake('Olá!') });
+
+    const resposta = await motor.responder(SLUG, 'contato-1', 'oi');
+
+    expect(embedder.chamadas).toBe(0);
+    expect(resposta.fontes).toEqual([]);
+    expect(resposta.melhorScore).toBe(0);
+  });
+
+  it('usa o prompt social, e não o de contexto', async () => {
+    // O prompt normal manda responder a frase de handoff quando o contexto não
+    // tem a resposta. Reaproveitá-lo com contexto vazio devolveria o bug.
+    semear([DOCUMENTO]);
+    const llm = new LlmFake('Olá! Como posso ajudar?');
+    const motor = new Motor({ db, embedder: new EmbedderFake(), llm });
+
+    await motor.responder(SLUG, 'contato-1', 'oi');
+
+    const chamada = llm.chamadas[0];
+    expect(chamada?.promptDoSistema).toContain('apenas social');
+    expect(chamada?.promptDoSistema).toContain('Clínica de Teste');
+    expect(chamada?.promptDoSistema).not.toContain('CONTEXTO');
+    expect(chamada?.mensagemDoUsuario).toBe('oi');
+  });
+
+  it('manda o histórico junto, para "boa noite" no fim virar despedida', async () => {
+    semear([DOCUMENTO]);
+    const llm = new LlmFake('Até logo!');
+    const motor = new Motor({ db, embedder: new EmbedderFake(), llm });
+
+    await motor.responder(SLUG, 'contato-1', 'oi');
+    await motor.responder(SLUG, 'contato-1', 'obrigado');
+
+    expect(llm.chamadas[1]?.historico.length).toBeGreaterThan(0);
+  });
+
+  it('continua respondendo normalmente a pergunta com saudação junto', async () => {
+    semear([DOCUMENTO]);
+    const llm = new LlmFake();
+    const motor = new Motor({ db, embedder: new EmbedderFake(), llm });
+
+    const resposta = await motor.responder(
+      SLUG,
+      'contato-1',
+      'oi, clínica abre segunda sexta horas',
+    );
+
+    expect(resposta.turnoSocial).toBeUndefined();
+    expect(resposta.fontes[0]?.arquivo).toBe('faq.md');
+    expect(llm.chamadas[0]?.mensagemDoUsuario).toContain('CONTEXTO:');
+  });
+
+  it('escala assim mesmo se o modelo prometer chamar alguém', async () => {
+    // O prompt social proíbe, mas já aconteceu duas vezes neste projeto de o
+    // modelo prometer atendente e a promessa passar batida. Promessa feita,
+    // alguém é chamado.
+    semear([DOCUMENTO]);
+    const motor = new Motor({
+      db,
+      embedder: new EmbedderFake(),
+      llm: new LlmFake('Oi! Vou chamar alguém da equipe para te ajudar.'),
+    });
+
+    const resposta = await motor.responder(SLUG, 'contato-1', 'oi');
+
+    expect(resposta.precisaDeHumano).toBe(true);
+    expect(resposta.motivoDoHandoff).toBe('baixa_confianca');
+  });
+});
+
 describe('limitarLinhas', () => {
   it('descarta linhas em branco antes de contar', () => {
     expect(limitarLinhas('a\n\n\nb', 3)).toBe('a\nb');

@@ -16,6 +16,7 @@ import { criarServidor } from '../src/adapters/web/rotas.js';
 import type { RespostaDoBot } from '../src/core/types.js';
 import type { PainelDoTenant } from '../src/core/painel/painel-service.js';
 import type { MensagemGravada } from '../src/storage/repositories/messages.js';
+import type { RegistroDeAvaliacao } from '../src/core/avaliacao/log.js';
 import { EmbedderFake, vetorDeTexto } from './helpers/fake-embedder.js';
 import { LlmFake } from './helpers/fake-llm.js';
 
@@ -176,6 +177,179 @@ describe('GET /api/conversa', () => {
   });
 });
 
+describe('POST /api/conversa/reiniciar', () => {
+  function reiniciar(contatoId: string): Promise<Response> {
+    return fetch(`${base}/api/conversa/reiniciar`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ contatoId }),
+    });
+  }
+
+  it('encerra a conversa em andamento e a próxima mensagem começa outra', async () => {
+    const primeira = await corpo<RespostaDoBot>(await mandar(PERGUNTA_BOA, 'contato-r'));
+    await reiniciar('contato-r');
+    const segunda = await corpo<RespostaDoBot>(await mandar(PERGUNTA_BOA, 'contato-r'));
+
+    expect(segunda.conversaId).not.toBe(primeira.conversaId);
+  });
+
+  it('DESTRAVA uma conversa presa em handoff', async () => {
+    // A razão de existir do botão. Depois de um handoff o bot fica mudo de
+    // propósito; sem uma forma de encerrar, o único jeito de voltar a
+    // conversar era trocar de contato.
+    await mandar(PERGUNTA_RUIM, 'contato-preso');
+    const mudo = await corpo<RespostaDoBot>(await mandar(PERGUNTA_BOA, 'contato-preso'));
+    expect(mudo.aguardandoHumano).toBe(true);
+
+    await reiniciar('contato-preso');
+    const depois = await corpo<RespostaDoBot>(await mandar(PERGUNTA_BOA, 'contato-preso'));
+
+    expect(depois.aguardandoHumano).toBe(false);
+    expect(depois.texto.length).toBeGreaterThan(0);
+  });
+
+  it('não apaga o histórico, que é o que alimenta o painel', async () => {
+    // Testar de novo não pode jogar fora o que o teste anterior produziu.
+    await mandar(PERGUNTA_BOA, 'contato-h');
+    await reiniciar('contato-h');
+
+    const painel = await corpo<PainelDoTenant>(await fetch(`${base}/api/painel`));
+    expect(painel.mensagens.total).toBe(2);
+    expect(painel.conversas.fechadas).toBe(1);
+  });
+
+  it('não zera o histórico de outro contato', async () => {
+    await mandar(PERGUNTA_BOA, 'contato-a');
+    const doB = await corpo<RespostaDoBot>(await mandar(PERGUNTA_BOA, 'contato-b'));
+
+    await reiniciar('contato-a');
+    const bDepois = await corpo<RespostaDoBot>(await mandar(PERGUNTA_BOA, 'contato-b'));
+
+    expect(bDepois.conversaId).toBe(doB.conversaId);
+  });
+
+  it('responde sem erro quando não há conversa para encerrar', async () => {
+    const resposta = await reiniciar('contato-que-nunca-falou');
+
+    expect(resposta.status).toBe(200);
+    expect((await corpo<{ encerrada: number | null }>(resposta)).encerrada).toBeNull();
+  });
+
+  it('recusa corpo sem contatoId', async () => {
+    expect((await reiniciar('')).status).toBe(400);
+  });
+});
+
+describe('bateria de testes', () => {
+  function rodarTestes(perguntas: unknown): Promise<Response> {
+    return fetch(`${base}/api/testes/rodar`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ perguntas }),
+    });
+  }
+
+  it('GET devolve o modelo e o limiar em vigor', async () => {
+    const dados = await corpo<{
+      tenant: { slug: string };
+      modelo: string;
+      limiar: number;
+      existe: boolean;
+      perguntas: unknown[];
+    }>(await fetch(`${base}/api/testes`));
+
+    expect(dados.tenant.slug).toBe(SLUG);
+    expect(dados.modelo.length).toBeGreaterThan(0);
+    expect(dados.limiar).toBeGreaterThan(0);
+    // O tenant deste teste não tem pasta em data/tenants, então não há arquivo.
+    expect(dados.existe).toBe(false);
+    expect(dados.perguntas).toEqual([]);
+  });
+
+  it('roda uma pergunta e devolve o veredito com as métricas', async () => {
+    const resposta = await rodarTestes([
+      { id: 'fora-do-dominio', pergunta: PERGUNTA_RUIM, esperaHandoff: true },
+    ]);
+    const dados = await corpo<{ resultados: RegistroDeAvaliacao[] }>(resposta);
+    const resultado = dados.resultados[0];
+
+    expect(resposta.status).toBe(200);
+    expect(resultado?.id).toBe('fora-do-dominio');
+    expect(resultado?.passou).toBe(true);
+    expect(resultado?.houveHandoff).toBe(true);
+    expect(resultado?.latenciaMs).toBeGreaterThanOrEqual(0);
+  });
+
+  it('aplica a regra global de número inventado, igual ao npm run avaliar', async () => {
+    // O dublê responde "das 8h às 18h" enquanto o chunk diz "das oito às
+    // dezoito horas": os horários da resposta não têm origem documental. Se a
+    // página julgasse com outro código que o da suíte, isto passaria aqui e
+    // falharia lá — e nenhum dos dois serviria para calibrar.
+    const dados = await corpo<{ resultados: RegistroDeAvaliacao[] }>(
+      await rodarTestes([{ id: 'horario', pergunta: PERGUNTA_BOA, esperaHandoff: false }]),
+    );
+    const resultado = dados.resultados[0];
+
+    expect(resultado?.passou).toBe(false);
+    expect(resultado?.falhas.map((f) => f.regra)).toContain('numeroInventado');
+  });
+
+  it('roda um grupo inteiro numa chamada, preservando a ordem', async () => {
+    const dados = await corpo<{ resultados: RegistroDeAvaliacao[] }>(
+      await rodarTestes([
+        { id: 'primeira', pergunta: PERGUNTA_RUIM, esperaHandoff: true },
+        { id: 'segunda', pergunta: PERGUNTA_BOA, esperaHandoff: false },
+      ]),
+    );
+
+    expect(dados.resultados.map((r) => r.id)).toEqual(['primeira', 'segunda']);
+  });
+
+  it('NÃO cria conversa nem handoff ao rodar', async () => {
+    // A suíte roda com semPersistir. Sem isso, calibrar pela página encheria o
+    // painel de conversas que nunca existiram e a fila da equipe de handoffs
+    // que nenhum cliente pediu.
+    await rodarTestes([{ id: 'fora', pergunta: PERGUNTA_RUIM, esperaHandoff: true }]);
+    const painel = await corpo<PainelDoTenant>(await fetch(`${base}/api/painel`));
+
+    expect(painel.conversas.total).toBe(0);
+    expect(painel.perguntasSemResposta).toEqual([]);
+  });
+
+  it('recusa rodar com campo desconhecido, antes de gastar', async () => {
+    // Rodar assim custaria dinheiro para produzir um "passou" que não checou
+    // nada: `deveConterr` com dois r não é regra nenhuma.
+    const resposta = await rodarTestes([
+      { id: 'a', pergunta: 'quanto custa?', deveConterr: ['180'] },
+    ]);
+
+    expect(resposta.status).toBe(400);
+    expect((await corpo<{ erros: string[] }>(resposta)).erros.join(' ')).toContain('deveConterr');
+  });
+
+  it('recusa rodar lista vazia ou ausente', async () => {
+    expect((await rodarTestes([])).status).toBe(400);
+    expect((await rodarTestes(undefined)).status).toBe(400);
+  });
+
+  it('PUT recusa suíte inválida sem escrever nada', async () => {
+    const resposta = await fetch(`${base}/api/testes`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        perguntas: [
+          { id: 'mesmo', pergunta: 'primeira?' },
+          { id: 'mesmo', pergunta: 'segunda?' },
+        ],
+      }),
+    });
+
+    expect(resposta.status).toBe(400);
+    expect((await corpo<{ erros: string[] }>(resposta)).erros.join(' ')).toContain('repetido');
+  });
+});
+
 describe('arquivos estáticos', () => {
   it('serve a página de conversa na raiz', async () => {
     const resposta = await fetch(`${base}/`);
@@ -187,6 +361,13 @@ describe('arquivos estáticos', () => {
 
   it('serve o painel', async () => {
     expect((await fetch(`${base}/painel`)).status).toBe(200);
+  });
+
+  it('serve a bateria de testes', async () => {
+    const resposta = await fetch(`${base}/testes`);
+
+    expect(resposta.status).toBe(200);
+    expect(await resposta.text()).toContain('<title>Bateria de testes</title>');
   });
 
   it('serve o CSS com o tipo certo', async () => {

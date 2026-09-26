@@ -82,13 +82,45 @@ export const config = {
      * que trocar o modelo de embeddings ou mudar muito os documentos.
      */
     limiarDeConfianca: 0.4,
+
+    /**
+     * Quando a busca falha numa conversa em andamento, tentar de novo com a
+     * pergunta anterior do cliente junto.
+     *
+     * O LLM recebe o histórico, mas a busca não recebia — então uma pergunta
+     * que se apoia na anterior morria antes de chegar ao modelo. Medido na
+     * clínica: "e o canal?" sozinho tira 0.369 e é barrado; junto com
+     * "quanto custa um implante?" tira 0.672.
+     *
+     * Só roda quando a primeira busca já falhou, e custa um embedding — não
+     * uma chamada ao modelo.
+     */
+    tentarComContextoDaConversa: true,
   },
 
-  /** Adaptador web (simulador e painel). */
+  /** Adaptador web (simulador, painel e bateria de testes). */
   web: {
     porta: Number(process.env.WEB_PORT ?? 3000),
-    /** Teto do corpo da requisição: mensagem de atendimento não tem megabytes. */
+    /**
+     * Teto do corpo da requisição. Uma mensagem de atendimento não tem
+     * megabytes, e o maior corpo que a página de testes manda é a suíte de
+     * perguntas inteira — uns 6 KB no tenant de exemplo.
+     */
     tamanhoMaximoDoCorpo: 64 * 1024,
+  },
+
+  /** Suíte de avaliação. */
+  avaliacao: {
+    /**
+     * Custo médio de uma pergunta, em dólares. Serve SÓ para a página de testes
+     * avisar quanto vai gastar antes de você clicar em rodar — o custo real de
+     * cada resposta é medido e reportado individualmente.
+     *
+     * Medido em 2026-09-24: US$ 0,000311 na barbearia, US$ 0,00042 na clínica.
+     * Arredondado para cima de propósito: estimativa que engana para baixo é
+     * pior que estimativa nenhuma.
+     */
+    custoEstimadoPorPerguntaUsd: 0.0005,
   },
 
   /** Estado e janela de contexto da conversa. */
@@ -104,6 +136,151 @@ export const config = {
      * Deixar o bot continuar atropelaria o atendente no meio do atendimento.
      */
     bloquearBotAposHandoff: true,
+
+    /**
+     * Memória compactada: quando a conversa passa da janela, as mensagens mais
+     * antigas viram um resumo em vez de simplesmente sumirem.
+     *
+     * Sem isto, numa conversa de 12 mensagens o começo cai fora da janela e o
+     * cliente precisa repetir o que já contou — que é exatamente o que um
+     * atendimento não pode fazer.
+     */
+    resumo: {
+      ativo: true,
+      /**
+       * Quantas mensagens continuam ÍNTEGRAS depois de uma compactação.
+       *
+       * Governa a frequência: com janela 8 e 4 preservadas, compacta a cada 4
+       * mensagens novas, ou seja a cada 2 turnos. Preservar menos economiza
+       * chamadas e perde literalidade; preservar mais faz o contrário.
+       */
+      mensagensPreservadas: 4,
+      /** Teto do resumo. Memória que cresce sem limite vira outra janela cheia. */
+      maximoDeLinhas: 8,
+    },
+  },
+
+  /**
+   * Turno social: saudação, agradecimento, despedida e confirmação.
+   *
+   * Mensagens assim não são pergunta sobre o negócio e não podem passar pelo
+   * caminho de busca. Medido de verdade: "boa tarde" tira 0.370 na clínica,
+   * abaixo do limiar, e sem este desvio o bot chamaria um atendente para
+   * responder a um cumprimento — e ainda se calaria pelo resto da conversa,
+   * porque depois de um handoff o bot para de responder.
+   */
+  social: {
+    /** Desligue para voltar ao comportamento antigo (tudo vira busca). */
+    ativo: true,
+    /**
+     * Expressões que caracterizam cada tipo de turno, já sem acento e em
+     * minúsculas — é assim que o texto chega na comparação.
+     *
+     * Só entra aqui o que NÃO cabe no meio de uma pergunta de verdade. Por
+     * isso "até" sozinho ficou de fora e só as formas compostas ("até logo")
+     * entraram: "até que horas vocês abrem?" é pergunta, não despedida.
+     */
+    expressoes: {
+      saudacao: [
+        'bom dia',
+        'boa tarde',
+        'boa noite',
+        'boa madrugada',
+        'tudo bem',
+        'tudo bom',
+        'td bem',
+        'td bom',
+        'como vai',
+        'como voce esta',
+        'como esta',
+        'oi',
+        'oie',
+        'ola',
+        'opa',
+        'alo',
+        'e ai',
+        'eai',
+        'eae',
+        'salve',
+        'hey',
+      ],
+      agradecimento: [
+        'muito obrigado',
+        'muito obrigada',
+        'obrigadao',
+        'obrigado',
+        'obrigada',
+        'brigado',
+        'brigada',
+        'agradeco',
+        'valeu',
+        'grato',
+        'grata',
+        'obg',
+        'vlw',
+      ],
+      despedida: [
+        'bom fim de semana',
+        'ate a proxima',
+        'ate amanha',
+        'ate breve',
+        'ate logo',
+        'ate mais',
+        'boa semana',
+        'bom descanso',
+        'abracos',
+        'abraco',
+        'adeus',
+        'falou',
+        'tchau',
+        'xau',
+        'flw',
+      ],
+      confirmacao: [
+        'tudo certo',
+        'isso mesmo',
+        'ta bom',
+        'ta bem',
+        'entendi',
+        'beleza',
+        'perfeito',
+        'bacana',
+        'certo',
+        'exato',
+        'otimo',
+        'legal',
+        'okay',
+        'show',
+        'uhum',
+        'aham',
+        'blz',
+        'sim',
+        'ok',
+      ],
+    },
+    /**
+     * Palavras que não carregam pergunta nenhuma. Saem junto com as expressões
+     * sociais, então "oi, por favor" continua sendo só uma saudação.
+     */
+    ruido: [
+      'por favor',
+      'pessoal',
+      'senhora',
+      'senhor',
+      'entao',
+      'amiga',
+      'amigo',
+      'gente',
+      'muito',
+      'moca',
+      'moco',
+      'pfv',
+      'mto',
+      'sra',
+      'ne',
+      'sr',
+      'ai',
+    ],
   },
 
   /** Regras de comportamento do bot — viram instruções no prompt do sistema. */

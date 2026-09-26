@@ -68,6 +68,16 @@ export type MotivoDeHandoff =
   /** A conversa ja estava com um humano quando a mensagem chegou. */
   | 'aguardando_humano';
 
+/**
+ * Turno de conversa que não é pergunta sobre o negócio.
+ *
+ * Existe porque o motor tinha só dois modos — responder pelos documentos ou
+ * chamar um humano — e uma saudação não é nenhum dos dois. Sem esta terceira
+ * categoria, "boa tarde" pontua baixo na busca, cai no limiar e aciona a
+ * equipe.
+ */
+export type CategoriaSocial = 'saudacao' | 'agradecimento' | 'despedida' | 'confirmacao';
+
 /** O que o núcleo devolve para qualquer adaptador. */
 export interface RespostaDoBot {
   texto: string;
@@ -75,6 +85,8 @@ export interface RespostaDoBot {
   /** true quando o bot desistiu e pediu ajuda humana. */
   precisaDeHumano: boolean;
   motivoDoHandoff?: MotivoDeHandoff;
+  /** Preenchido quando a mensagem foi tratada como turno social, sem busca. */
+  turnoSocial?: CategoriaSocial;
   /** Melhor score encontrado na busca — guardado para calibrar o limiar. */
   melhorScore: number;
   uso: Uso;

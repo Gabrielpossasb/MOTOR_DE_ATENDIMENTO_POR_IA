@@ -17,6 +17,8 @@ export interface RegistroDeAvaliacao {
   tenant: string;
   id: string;
   pergunta: string;
+  /** Anotação escrita no avaliacao.json: por que esta pergunta está na suíte. */
+  comentario?: string;
   passou: boolean;
   falhas: FalhaDeRegra[];
   resposta: string;
@@ -194,6 +196,13 @@ function detalharPergunta(r: RegistroDeAvaliacao): string[] {
   linhas.push('');
   linhas.push(`**Resposta:** ${r.resposta.length > 0 ? r.resposta : '_(vazia)_'}`);
   linhas.push('');
+
+  // A anotação diz POR QUE a pergunta está na suíte. Sem ela no relatório, seis
+  // meses depois ninguém lembra se um handoff esperado era intencional.
+  if (r.comentario) {
+    linhas.push(`> ${r.comentario}`);
+    linhas.push('');
+  }
 
   if (!r.passou) {
     linhas.push('**Por que falhou:**');

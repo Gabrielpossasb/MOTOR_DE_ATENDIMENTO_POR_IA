@@ -340,6 +340,32 @@ describe('log de avaliação', () => {
     expect(texto).toContain('best_score 0.570');
   });
 
+  it('mostra o comentário da pergunta no relatório', () => {
+    // A anotação diz POR QUE a pergunta está na suíte. Sem ela no relatório,
+    // seis meses depois ninguém lembra se um handoff esperado era intencional.
+    const atual = [registro({ comentario: 'Fala da clínica mas a base não responde.' })];
+    const texto = montarRelatorio(
+      resumir(atual, { execucao: 'e', tenant: 'clinica', modelo: 'fake', limiar: 0.4 }),
+      atual,
+      new Map(),
+    );
+
+    expect(texto).toContain('Fala da clínica mas a base não responde.');
+  });
+
+  it('não deixa linha vazia quando a pergunta não tem comentário', () => {
+    const atual = [registro()];
+    const texto = montarRelatorio(
+      resumir(atual, { execucao: 'e', tenant: 'clinica', modelo: 'fake', limiar: 0.4 }),
+      atual,
+      new Map(),
+    );
+
+    expect(texto).not.toContain('> undefined');
+    // Nenhuma linha de citação vazia sobrando onde não havia comentário.
+    expect(texto.split('\n').some((l) => l.trim() === '>')).toBe(false);
+  });
+
   it('avisa quando é a primeira execução, em vez de fingir comparação', () => {
     const atual = [registro()];
     const texto = montarRelatorio(

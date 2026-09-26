@@ -17,12 +17,14 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { config } from '../config.js';
-import { abrirBanco, type Db } from '../storage/db.js';
+import { abrirBanco } from '../storage/db.js';
 import { carregarTenant, configEfetiva } from '../core/tenant/tenant-service.js';
 import { EmbedderOpenAI } from '../core/rag/embedder.js';
 import { LlmOpenAI } from '../core/llm/client.js';
 import { Motor } from '../core/engine.js';
-import { verificar, type PerguntaDeAvaliacao } from '../core/avaliacao/regras.js';
+import type { PerguntaDeAvaliacao } from '../core/avaliacao/regras.js';
+import { caminhoDaAvaliacao, lerAvaliacao } from '../core/avaliacao/arquivo.js';
+import { rodarPergunta, type DependenciasDaSuite } from '../core/avaliacao/suite.js';
 import {
   garantirPastas,
   gravarHistorico,
@@ -37,11 +39,6 @@ import {
   montarRelatorioDeEstabilidade,
   resumirEstabilidade,
 } from '../core/avaliacao/estabilidade.js';
-
-interface ArquivoDeAvaliacao {
-  descricao?: string;
-  perguntas: PerguntaDeAvaliacao[];
-}
 
 /** Quantas vezes repetir a suíte, lido de `--repeticoes N`. */
 function lerRepeticoes(): number {
@@ -63,13 +60,14 @@ async function principal(): Promise<void> {
     process.exit(1);
   }
 
-  const arquivo = path.join(config.caminhos.documentosTenant(slug), 'avaliacao.json');
-  if (!fs.existsSync(arquivo)) {
-    console.error(`Arquivo de avaliação não encontrado: ${arquivo}`);
+  // `lerAvaliacao` valida o arquivo: campo escrito errado é erro aqui, e não
+  // uma regra que silenciosamente deixa de ser checada.
+  const { existe, perguntas } = lerAvaliacao(slug);
+  if (!existe) {
+    console.error(`Arquivo de avaliação não encontrado: ${caminhoDaAvaliacao(slug)}`);
     process.exit(1);
   }
 
-  const { perguntas } = JSON.parse(fs.readFileSync(arquivo, 'utf8')) as ArquivoDeAvaliacao;
   const repeticoes = lerRepeticoes();
   const db = abrirBanco();
 
@@ -139,55 +137,30 @@ async function principal(): Promise<void> {
   }
 }
 
-interface ParametrosDaRodada {
-  motor: Motor;
-  db: Db;
-  slug: string;
-  tenantId: number;
+interface ParametrosDaRodada extends DependenciasDaSuite {
   perguntas: PerguntaDeAvaliacao[];
-  execucao: string;
-  limiar: number;
   detalhar: boolean;
 }
 
+/**
+ * Roda a suíte uma vez.
+ *
+ * A execução e o julgamento de cada pergunta vivem em `core/avaliacao/suite.ts`,
+ * compartilhados com a página de testes do adaptador web. Aqui fica só o que é
+ * do script: imprimir o andamento no terminal.
+ */
 async function rodarUmaVez(p: ParametrosDaRodada): Promise<RegistroDeAvaliacao[]> {
   const registros: RegistroDeAvaliacao[] = [];
 
   for (const esperado of p.perguntas) {
-    const resposta = await p.motor.responder(p.slug, `avaliacao-${esperado.id}`, esperado.pergunta, {
-      canal: 'avaliacao',
-      semPersistir: true,
-    });
-
-    // A checagem de número inventado compara contra o texto REAL dos chunks.
-    const contextoCompleto = textoDosChunksCitados(p.db, p.tenantId, resposta.fontes);
-    const verificacao = verificar(esperado, resposta, contextoCompleto);
-
-    registros.push({
-      execucao: p.execucao,
-      tenant: p.slug,
-      id: esperado.id,
-      pergunta: esperado.pergunta,
-      passou: verificacao.passou,
-      falhas: verificacao.falhas,
-      resposta: resposta.texto,
-      esperavaHandoff: esperado.esperaHandoff === true,
-      houveHandoff: resposta.precisaDeHumano,
-      melhorScore: resposta.melhorScore,
-      fontes: resposta.fontes,
-      tokensEntrada: resposta.uso.tokensEntrada,
-      tokensSaida: resposta.uso.tokensSaida,
-      custoUsd: resposta.uso.custoEstimadoUsd,
-      latenciaMs: resposta.uso.latenciaMs,
-      modelo: config.llm.modelo,
-      limiar: p.limiar,
-    });
+    const registro = await rodarPergunta(p, esperado);
+    registros.push(registro);
 
     if (p.detalhar) {
-      const marca = verificacao.passou ? 'ok    ' : 'FALHOU';
-      const motivo = verificacao.passou
+      const marca = registro.passou ? 'ok    ' : 'FALHOU';
+      const motivo = registro.passou
         ? ''
-        : ` — ${verificacao.falhas.map((f) => f.detalhe).join('; ')}`;
+        : ` — ${registro.falhas.map((f) => f.detalhe).join('; ')}`;
       console.log(`  ${marca} ${esperado.id}${motivo}`);
     }
   }
@@ -238,34 +211,6 @@ function relatarEstabilidade(
   console.log(`OSCILARAM:       ${resumo.oscilaram}`);
   console.log(`Custo das ${repeticoes} rodadas: US$ ${resumo.custoTotalUsd.toFixed(6)}`);
   console.log('\nRelatório de estabilidade: logs/ESTABILIDADE.md');
-}
-
-/**
- * Recupera o texto integral dos chunks que embasaram a resposta.
- *
- * A checagem de número inventado compara contra o texto REAL dos chunks, não
- * contra o nome do arquivo — senão qualquer preço passaria.
- */
-function textoDosChunksCitados(
-  db: Db,
-  tenantId: number,
-  fontes: { arquivo: string; secao?: string }[],
-): string {
-  if (fontes.length === 0) return '';
-
-  const arquivos = [...new Set(fontes.map((f) => f.arquivo))];
-  const marcadores = arquivos.map(() => '?').join(', ');
-
-  const linhas = db
-    .prepare(
-      `SELECT c.text
-       FROM chunks c
-       JOIN documents d ON d.id = c.document_id
-       WHERE c.tenant_id = ? AND d.filename IN (${marcadores})`,
-    )
-    .all(tenantId, ...arquivos) as { text: string }[];
-
-  return linhas.map((l) => l.text).join('\n');
 }
 
 principal().catch((erro: unknown) => {

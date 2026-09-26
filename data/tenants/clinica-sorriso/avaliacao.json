@@ -157,6 +157,35 @@
       "esperaHandoff": false,
       "fonteEsperada": "faq.md",
       "comentario": "Esta pergunta foi a ÚNICA a oscilar na medição de estabilidade de 5 rodadas (passou 2/5, com 3 textos distintos e variação de score zero — ou seja, puro o LLM). A causa era o documento: a base dizia que os valores são 'válidos para pagamento à vista' mas nunca falava de desconto, e o modelo não conseguia decidir se sabia ou não. O conserto foi de produto, não de código: escrever a informação que faltava no faq.md. É para isso que serve a lista de unanswered."
+    },
+    {
+      "id": "social-saudacao",
+      "pergunta": "boa tarde",
+      "naoPodeConter": ["chamar alguém da equipe", "não tenho essa informação"],
+      "esperaHandoff": false,
+      "comentario": "FAMÍLIA 4, social. O caso que motivou o desvio de turno social: rodando de verdade, 'boa tarde' tirou 0.370 na busca, caiu no limiar e o bot chamou um atendente para responder a um cumprimento — e ficou mudo pelo resto da conversa, porque depois de um handoff o bot para de responder. Sem fonteEsperada de propósito: turno social não faz busca."
+    },
+    {
+      "id": "social-agradecimento",
+      "pergunta": "obrigado!",
+      "naoPodeConter": ["chamar alguém da equipe", "não tenho essa informação"],
+      "esperaHandoff": false,
+      "comentario": "FAMÍLIA 4, social. Um 'obrigado' no fim do atendimento não pode reabrir a fila da equipe."
+    },
+    {
+      "id": "social-despedida",
+      "pergunta": "tchau, até mais",
+      "naoPodeConter": ["chamar alguém da equipe", "não tenho essa informação"],
+      "esperaHandoff": false,
+      "comentario": "FAMÍLIA 4, social."
+    },
+    {
+      "id": "social-com-pergunta-junto",
+      "pergunta": "boa tarde, vocês abrem no sábado?",
+      "deveConter": ["8h", "12h"],
+      "esperaHandoff": false,
+      "fonteEsperada": "horarios.txt",
+      "comentario": "O contrário do anterior, e o mais importante dos quatro: a saudação vem grudada numa pergunta de verdade. Tem de responder a PERGUNTA, não devolver um 'oi, tudo bem?'. É o teste que pega o classificador de turno social sendo agressivo demais."
     }
   ]
 }

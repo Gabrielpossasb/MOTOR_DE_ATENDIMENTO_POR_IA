@@ -10,17 +10,30 @@ import { config } from '../config.js';
 import type { Db } from '../storage/db.js';
 import type { LlmClient } from './llm/client.js';
 import { custoDaResposta } from './llm/client.js';
-import { montarMensagemComContexto, montarPromptDoSistema } from './llm/prompts.js';
+import {
+  montarMensagemComContexto,
+  montarPromptDoSistema,
+  montarPromptSocial,
+} from './llm/prompts.js';
+import { normalizar } from './texto.js';
+import { classificarTurnoSocial } from './conversation/turno-social.js';
 import type { Embedder } from './rag/embedder.js';
 import { custoDeEmbedding } from './rag/embedder.js';
 import type { BuscaVetorial } from './rag/retriever.js';
 import { BuscaPorCossenoEmMemoria } from './rag/retriever.js';
 import { carregarTenant, configEfetiva } from './tenant/tenant-service.js';
-import { janelaDeContexto } from './conversation/conversation-service.js';
+import {
+  compactarSeNecessario,
+  janelaDeContexto,
+  montarContextoDaConversa,
+  SEM_CUSTO,
+  ultimaPerguntaDoCliente,
+} from './conversation/conversation-service.js';
 import { gravarMensagem } from '../storage/repositories/messages.js';
 import { marcarAtividade, mudarStatus, obterOuCriarConversa } from '../storage/repositories/conversations.js';
 import { registrarHandoff, registrarPerguntaSemResposta } from '../storage/repositories/handoffs.js';
 import type {
+  CategoriaSocial,
   Fonte,
   MotivoDeHandoff,
   RespostaDoBot,
@@ -112,19 +125,73 @@ export class Motor {
       });
     }
 
-    // 1. Vetor da pergunta.
+    // 1. Turno social (oi, obrigado, tchau): não é pergunta sobre o negócio.
+    //    Precisa sair ANTES da busca — uma saudação pontua baixo, cairia no
+    //    limiar e acionaria a equipe para responder a um cumprimento. Pior:
+    //    o handoff deixa o bot mudo, e a pergunta de verdade, que viria na
+    //    mensagem seguinte, nunca seria respondida.
+    const categoriaSocial = config.social.ativo
+      ? classificarTurnoSocial(textoDaPergunta)
+      : undefined;
+
+    if (categoriaSocial) {
+      return this.responderSocialmente({
+        tenant,
+        conversaId: conversa?.id,
+        categoria: categoriaSocial,
+        pergunta: textoDaPergunta,
+        inicio,
+        persistir,
+      });
+    }
+
+    // 2. Vetor da pergunta.
     const { vetores, tokens: tokensDeEmbedding } = await this.embedder.gerar([textoDaPergunta]);
     const vetorDaPergunta = vetores[0];
     if (!vetorDaPergunta) {
       throw new Error('O embedder não devolveu vetor para a pergunta.');
     }
-    const custoEmbedding = custoDeEmbedding(tokensDeEmbedding);
+    let custoEmbedding = custoDeEmbedding(tokensDeEmbedding);
 
-    // 2. Chunks mais parecidos, apenas deste tenant.
-    const resultados = this.busca.buscar(tenant.id, vetorDaPergunta, ajustes.topK);
-    const melhorScore = resultados[0]?.score ?? 0;
+    // 3. Chunks mais parecidos, apenas deste tenant.
+    let resultados = this.busca.buscar(tenant.id, vetorDaPergunta, ajustes.topK);
+    let melhorScore = resultados[0]?.score ?? 0;
 
-    // 3. Confiança baixa: nem chama o LLM. Economiza dinheiro e evita que o
+    // 3b. Score baixo numa conversa em andamento costuma ser pergunta que se
+    //     apoia na anterior. Medido na clínica: "e o canal?" sozinho tira
+    //     0.369 e é barrado; junto com a pergunta anterior ("quanto custa um
+    //     implante?") tira 0.672. O LLM recebe o histórico, mas a BUSCA não —
+    //     e sem chunk não há resposta, por mais contexto que o modelo tenha.
+    //
+    //     Só tenta de novo quando a primeira busca falhou, então o caso comum
+    //     não paga nada. E o que se paga é um embedding, não uma chamada ao
+    //     modelo: ordem de centavos de milésimo.
+    if (
+      conversa &&
+      config.busca.tentarComContextoDaConversa &&
+      melhorScore < ajustes.limiarDeConfianca
+    ) {
+      const anterior = ultimaPerguntaDoCliente(this.db, conversa.id);
+
+      if (anterior) {
+        const combinada = `${anterior} ${textoDaPergunta}`;
+        const { vetores: comContexto, tokens } = await this.embedder.gerar([combinada]);
+        const vetor = comContexto[0];
+        custoEmbedding += custoDeEmbedding(tokens);
+
+        if (vetor) {
+          const outros = this.busca.buscar(tenant.id, vetor, ajustes.topK);
+          const outroScore = outros[0]?.score ?? 0;
+
+          if (outroScore > melhorScore) {
+            resultados = outros;
+            melhorScore = outroScore;
+          }
+        }
+      }
+    }
+
+    // 4. Confiança baixa: nem chama o LLM. Economiza dinheiro e evita que o
     //    modelo invente resposta em cima de contexto irrelevante.
     if (resultados.length === 0 || melhorScore < ajustes.limiarDeConfianca) {
       return this.encerrarSemResposta({
@@ -139,16 +206,23 @@ export class Motor {
       });
     }
 
-    // 4. Só os chunks acima do limiar viram contexto — um chunk ruim no meio do
+    // 5. Só os chunks acima do limiar viram contexto — um chunk ruim no meio do
     //    prompt só confunde o modelo e ainda é pago por token.
     const relevantes = resultados.filter((r) => r.score >= ajustes.limiarDeConfianca);
 
-    const historico: TurnoDaConversa[] = conversa ? janelaDeContexto(this.db, conversa.id) : [];
+    // Compacta antes de montar o contexto, para este turno já ver a memória.
+    const compactacao = conversa
+      ? await compactarSeNecessario(this.db, this.llm, conversa.id)
+      : SEM_CUSTO;
+
+    const contexto = conversa
+      ? montarContextoDaConversa(this.db, conversa.id)
+      : { historico: [] as TurnoDaConversa[] };
 
     const resposta = await this.llm.responder(
-      montarPromptDoSistema(tenant.promptDoSistema),
+      montarPromptDoSistema(tenant.promptDoSistema, contexto.resumo),
       montarMensagemComContexto(textoDaPergunta, relevantes),
-      historico,
+      contexto.historico,
     );
 
     const texto = limitarLinhas(resposta.texto, config.resposta.maximoDeLinhas);
@@ -156,7 +230,16 @@ export class Motor {
     // Nesse caso a resposta também vira handoff.
     const desistiu = pediuAjudaHumana(texto);
 
-    const custo = custoDaResposta(resposta.tokensEntrada, resposta.tokensSaida) + custoEmbedding;
+    const custo =
+      custoDaResposta(resposta.tokensEntrada, resposta.tokensSaida) +
+      custoEmbedding +
+      compactacao.custoUsd;
+
+    // Os tokens da compactação entram na conta: ela é uma chamada de verdade,
+    // e custo reportado que ignora uma chamada paga é ficção.
+    const tokensEntrada = resposta.tokensEntrada + compactacao.tokensEntrada;
+    const tokensSaida = resposta.tokensSaida + compactacao.tokensSaida;
+
     const latenciaMs = Date.now() - inicio;
     const fontes = desistiu ? [] : paraFontes(relevantes);
 
@@ -166,8 +249,8 @@ export class Motor {
         conversaId: conversa.id,
         papel: 'assistant',
         conteudo: texto,
-        tokensEntrada: resposta.tokensEntrada,
-        tokensSaida: resposta.tokensSaida,
+        tokensEntrada,
+        tokensSaida,
         custoUsd: custo,
         latenciaMs,
         fontes,
@@ -187,12 +270,98 @@ export class Motor {
       ...(desistiu ? { motivoDoHandoff: 'baixa_confianca' as const } : {}),
       melhorScore,
       uso: {
+        tokensEntrada,
+        tokensSaida,
+        custoEstimadoUsd: custo,
+        latenciaMs,
+      },
+      ...(conversa ? { conversaId: conversa.id } : {}),
+      aguardandoHumano: false,
+    };
+  }
+
+  /**
+   * Responde um turno social: sem busca, sem contexto e sem handoff.
+   *
+   * Vai ao LLM em vez de devolver frase pronta porque uma saudação é a
+   * primeira impressão do cliente, e resposta enlatada se denuncia na segunda
+   * vez que a pessoa escreve. O histórico da conversa vai junto: é o que faz
+   * "boa noite" no fim de um atendimento ser lido como despedida, e não como
+   * um novo cumprimento.
+   *
+   * Não gera custo de embedding: a busca nem acontece.
+   */
+  private async responderSocialmente(dados: {
+    tenant: Tenant;
+    conversaId: number | undefined;
+    categoria: CategoriaSocial;
+    pergunta: string;
+    inicio: number;
+    persistir: boolean;
+  }): Promise<RespostaDoBot> {
+    const historico: TurnoDaConversa[] =
+      dados.conversaId !== undefined ? janelaDeContexto(this.db, dados.conversaId) : [];
+
+    const resposta = await this.llm.responder(
+      montarPromptSocial(dados.tenant.promptDoSistema, dados.categoria),
+      dados.pergunta,
+      historico,
+    );
+
+    const texto = limitarLinhas(resposta.texto, config.resposta.maximoDeLinhas);
+
+    // O prompt social proíbe prometer atendente, mas a checagem fica assim
+    // mesmo: já aconteceu duas vezes neste projeto de o modelo prometer chamar
+    // alguém e a promessa passar despercebida. Se ele prometeu, alguém vai.
+    const desistiu = pediuAjudaHumana(texto);
+
+    const custo = custoDaResposta(resposta.tokensEntrada, resposta.tokensSaida);
+    const latenciaMs = Date.now() - dados.inicio;
+
+    if (dados.persistir && dados.conversaId !== undefined) {
+      gravarMensagem(this.db, {
+        conversaId: dados.conversaId,
+        papel: 'user',
+        conteudo: dados.pergunta,
+      });
+      gravarMensagem(this.db, {
+        conversaId: dados.conversaId,
+        papel: 'assistant',
+        conteudo: texto,
+        tokensEntrada: resposta.tokensEntrada,
+        tokensSaida: resposta.tokensSaida,
+        custoUsd: custo,
+        latenciaMs,
+        fontes: [],
+      });
+
+      if (desistiu) {
+        this.registrarDesistencia(
+          dados.tenant.id,
+          dados.conversaId,
+          dados.pergunta,
+          0,
+          'baixa_confianca',
+        );
+      } else {
+        marcarAtividade(this.db, dados.conversaId);
+      }
+    }
+
+    return {
+      texto,
+      fontes: [],
+      precisaDeHumano: desistiu,
+      ...(desistiu ? { motivoDoHandoff: 'baixa_confianca' as const } : {}),
+      turnoSocial: dados.categoria,
+      melhorScore: 0,
+      uso: {
         tokensEntrada: resposta.tokensEntrada,
         tokensSaida: resposta.tokensSaida,
         custoEstimadoUsd: custo,
         latenciaMs,
       },
-      ...(conversa ? { conversaId: conversa.id } : {}),
+      ...(dados.conversaId !== undefined ? { conversaId: dados.conversaId } : {}),
       aguardandoHumano: false,
     };
   }
@@ -299,16 +468,6 @@ export function pediuAjudaHumana(texto: string): boolean {
     normalizado.includes(normalizar(config.resposta.fraseDeHandoff)) ||
     normalizado.includes(normalizar(config.resposta.marcadorDeHandoff))
   );
-}
-
-/** Minúsculas, sem acento e com espaços colapsados, para comparar texto livre. */
-function normalizar(texto: string): string {
-  return texto
-    .toLowerCase()
-    .normalize('NFD')
-    .replace(/[̀-ͯ]/g, '')
-    .replace(/\s+/g, ' ')
-    .trim();
 }
 
 /** Converte os chunks usados nas fontes citadas ao usuário, sem repetir arquivo. */

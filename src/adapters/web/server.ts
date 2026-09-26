@@ -37,6 +37,7 @@ function principal(): void {
   servidor.listen(config.web.porta, () => {
     console.log(`\n${tenant.nome}`);
     console.log(`\n  Conversa: http://localhost:${config.web.porta}/`);
+    console.log(`  Testes:   http://localhost:${config.web.porta}/testes`);
     console.log(`  Painel:   http://localhost:${config.web.porta}/painel`);
     console.log('\nCtrl+C para encerrar.\n');
   });

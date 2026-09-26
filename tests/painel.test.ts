@@ -9,6 +9,8 @@ import { montarPainel } from '../src/core/painel/painel-service.js';
 import { Motor } from '../src/core/engine.js';
 import { EmbedderFake, vetorDeTexto } from './helpers/fake-embedder.js';
 import { LlmFake } from './helpers/fake-llm.js';
+import { config } from '../src/config.js';
+import type { TurnoDaConversa } from '../src/core/types.js';
 
 const SLUG = 'clinica';
 const TEXTO = 'A clínica abre de segunda a sexta das oito às dezoito horas.';
@@ -40,6 +42,36 @@ function semear(): void {
 
 function motor(): Motor {
   return new Motor({ db, embedder: new EmbedderFake(), llm: new LlmFake() });
+}
+
+/**
+ * Responde normalmente, mas desiste na pergunta fora do assunto.
+ *
+ * Existe para o teste da taxa de resolução não depender da mecânica de busca.
+ * Antes ele contava com o limiar barrar a pergunta ruim; desde que a busca
+ * passou a tentar de novo com o contexto da conversa, o score sobe e a
+ * pergunta chega ao modelo — que recusa, medido contra a API real: a pergunta
+ * fora do assunto tira 0.373 sozinha e 0.443 depois de uma pergunta boa, e nos
+ * dois casos termina em handoff.
+ *
+ * O teste é do PAINEL, não da recuperação. Controlando o handoff aqui, ele
+ * passa a valer com ou sem a segunda tentativa.
+ */
+class LlmQueDesiste extends LlmFake {
+  override async responder(
+    promptDoSistema: string,
+    mensagemDoUsuario: string,
+    historico: TurnoDaConversa[] = [],
+  ) {
+    if (mensagemDoUsuario.includes('pizza')) {
+      return { texto: config.resposta.fraseDeHandoff, tokensEntrada: 10, tokensSaida: 5 };
+    }
+    return super.responder(promptDoSistema, mensagemDoUsuario, historico);
+  }
+}
+
+function motorQueDesiste(): Motor {
+  return new Motor({ db, embedder: new EmbedderFake(), llm: new LlmQueDesiste() });
 }
 
 beforeEach(() => {
@@ -77,7 +109,7 @@ describe('montarPainel', () => {
   it('a taxa de resolução conta por conversa, não por mensagem', async () => {
     // Uma conversa com 5 acertos e 1 handoff no fim NÃO foi resolvida pelo bot:
     // alguém da equipe teve de entrar. Contar por mensagem esconderia isso.
-    const m = motor();
+    const m = motorQueDesiste();
 
     await m.responder(SLUG, 'c1', PERGUNTA_BOA, { canal: 'web' });
     await m.responder(SLUG, 'c1', PERGUNTA_BOA, { canal: 'web' });

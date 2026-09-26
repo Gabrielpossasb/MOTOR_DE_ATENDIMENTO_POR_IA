@@ -6,6 +6,11 @@
  * ter os seus próprios testes offline.
  */
 import type { RespostaDoBot } from '../types.js';
+import { normalizar } from '../texto.js';
+
+// Reexportado porque as regras daqui comparam texto livre do mesmo jeito que o
+// motor compara; uma segunda implementação divergiria em silêncio.
+export { normalizar };
 
 export interface PerguntaDeAvaliacao {
   id: string;
@@ -30,16 +35,6 @@ export interface FalhaDeRegra {
 export interface ResultadoDaVerificacao {
   passou: boolean;
   falhas: FalhaDeRegra[];
-}
-
-/** Minúsculas e sem acento: comparar texto livre de outro jeito só gera ruído. */
-export function normalizar(texto: string): string {
-  return texto
-    .toLowerCase()
-    .normalize('NFD')
-    .replace(/[̀-ͯ]/g, '')
-    .replace(/\s+/g, ' ')
-    .trim();
 }
 
 /**

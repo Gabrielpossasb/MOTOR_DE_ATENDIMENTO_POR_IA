@@ -128,7 +128,13 @@
           <h1 id="titulo">Atendimento</h1>
           <div class="sub" id="subtitulo">simulador local</div>
         </div>
-        <a href="/painel">Painel</a>
+        <div class="navegacao">
+          <button type="button" id="reiniciar" title="Fecha esta conversa e começa outra do zero (Ctrl+Shift+N)">
+            Nova conversa
+          </button>
+          <a href="/testes">Testes</a>
+          <a href="/painel">Painel</a>
+        </div>
       </div>
 
       <div class="mensagens" id="mensagens"></div>
@@ -160,6 +166,7 @@
       const elEntrada = document.getElementById('entrada');
       const elEnviar = document.getElementById('enviar');
       const elFormulario = document.getElementById('formulario');
+      const elReiniciar = document.getElementById('reiniciar');
 
       document.getElementById('subtitulo').textContent = 'contato ' + contatoId;
 
@@ -259,6 +266,59 @@
         elEntrada.disabled = false;
         elEnviar.disabled = false;
         elEntrada.focus();
+      });
+
+      /**
+       * Fecha a conversa atual e começa outra do zero, com o MESMO contato.
+       *
+       * Quem faz o trabalho é o backend: `closed` faz a próxima mensagem criar
+       * uma conversa nova, sem histórico e sem herdar o status. Por isso este
+       * botão também é a saída de uma conversa presa em handoff, quando o bot
+       * ficou mudo.
+       *
+       * Não apaga nada: o histórico é o que alimenta o painel e a lista de
+       * buracos da base. Testar de novo não pode jogar fora o que o teste
+       * anterior produziu.
+       */
+      async function reiniciar() {
+        elReiniciar.disabled = true;
+
+        try {
+          const resposta = await fetch('/api/conversa/reiniciar', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ contatoId }),
+          });
+          const dados = await resposta.json();
+
+          if (!resposta.ok) {
+            adicionarAviso('Não consegui reiniciar: ' + (dados.erro || resposta.status));
+            return;
+          }
+
+          elMensagens.innerHTML = '';
+          adicionarAviso(
+            dados.encerrada === null
+              ? 'Conversa nova. Nada a encerrar — não havia conversa em andamento.'
+              : 'Conversa #' + dados.encerrada + ' encerrada. A próxima mensagem começa do zero.',
+          );
+        } catch (erro) {
+          adicionarAviso('Falha de rede: ' + erro.message);
+        } finally {
+          elReiniciar.disabled = false;
+          elEntrada.focus();
+        }
+      }
+
+      elReiniciar.addEventListener('click', reiniciar);
+
+      // Atalho para ir testando conversa atrás de conversa sem tirar a mão do
+      // teclado. Shift no meio para não colidir com o "nova janela" do browser.
+      document.addEventListener('keydown', (evento) => {
+        if (evento.ctrlKey && evento.shiftKey && evento.key.toLowerCase() === 'n') {
+          evento.preventDefault();
+          reiniciar();
+        }
       });
 
       fetch('/api/painel')
