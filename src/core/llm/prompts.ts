@@ -12,16 +12,25 @@ import type { CategoriaSocial, ResultadoDeBusca } from '../types.js';
 export function regrasDoBot(): string {
   return [
     'REGRAS OBRIGATÓRIAS:',
-    '1. Responda APENAS com base no CONTEXTO fornecido abaixo. Ele é sua única fonte de verdade.',
-    '2. Se o contexto não contém a resposta, responda exatamente: ' +
-      `"${config.resposta.fraseDeHandoff}"`,
-    '3. NUNCA invente preço, prazo, horário ou disponibilidade. Se o número não está ' +
+    '1. Ao responder sobre o negócio, use APENAS o CONTEXTO fornecido abaixo. Ele é sua ' +
+      'única fonte de verdade.',
+    // As regras 2 e 3 já foram uma só ("se o contexto não responde, escale"), e essa
+    // mistura matava conversa: um "bom diaa" com contexto vazio caía nela e acionava a
+    // equipe para retribuir um cumprimento. Não saber a resposta de uma pergunta e a
+    // mensagem não ser uma pergunta são situações diferentes.
+    '2. Se a mensagem NÃO for uma pergunta sobre o negócio — um cumprimento, uma conversa ' +
+      'solta, um agradecimento, ou algo que você não conseguiu entender — responda em uma ' +
+      'linha, com simpatia, e pergunte o que a pessoa precisa. NÃO chame ninguém da ' +
+      'equipe: não existe informação faltando, só não foi feita uma pergunta ainda.',
+    '3. Se FOR uma pergunta sobre o negócio e o CONTEXTO não a responder, responda ' +
+      `exatamente: "${config.resposta.fraseDeHandoff}"`,
+    '4. NUNCA invente preço, prazo, horário ou disponibilidade. Se o número não está ' +
       'literalmente no contexto, você não o tem.',
-    `4. No máximo ${config.resposta.maximoDeLinhas} linhas. Seja direto.`,
-    '5. Envie uma única mensagem. Nunca escreva várias mensagens seguidas.',
-    '6. Se faltam vários dados para atender a pessoa, pergunte todos de uma vez, numa frase só.',
-    '7. Não tente vender, agendar nem processar pagamento. Você só informa.',
-    '8. Escreva em português do Brasil, em tom de conversa de WhatsApp.',
+    `5. No máximo ${config.resposta.maximoDeLinhas} linhas. Seja direto.`,
+    '6. Envie uma única mensagem. Nunca escreva várias mensagens seguidas.',
+    '7. Se faltam vários dados para atender a pessoa, pergunte todos de uma vez, numa frase só.',
+    '8. Não tente vender, agendar nem processar pagamento. Você só informa.',
+    '9. Escreva em português do Brasil, em tom de conversa de WhatsApp.',
   ].join('\n');
 }
 
@@ -155,13 +164,40 @@ export function montarPromptSocial(promptDoTenant: string, categoria: CategoriaS
  * Cada trecho vem rotulado com o arquivo de origem para o modelo conseguir
  * distinguir as fontes — e para nós conferirmos de onde saiu a resposta.
  */
-export function montarMensagemComContexto(pergunta: string, resultados: ResultadoDeBusca[]): string {
-  const contexto = resultados
+export function montarMensagemComContexto(
+  pergunta: string,
+  resultados: ResultadoDeBusca[],
+  incerto = false,
+): string {
+  // Desde que o limiar deixou de barrar, chega aqui mensagem sem nenhum trecho
+  // relevante — um cumprimento, por exemplo. Uma seção CONTEXTO em branco faz o
+  // modelo procurar o que não existe; dizer que não veio nada é mais honesto e
+  // deixa claro que a regra 2 ou a 3 é que valem.
+  if (resultados.length === 0) {
+    return [
+      'CONTEXTO:',
+      '(nenhum trecho relevante encontrado para esta mensagem)',
+      '',
+      'MENSAGEM DO CLIENTE:',
+      pergunta,
+    ].join('\n');
+  }
+
+  const trechos = resultados
     .map((r, i) => {
       const secao = r.chunk.metadados.secao ? ` — ${r.chunk.metadados.secao}` : '';
       return `[${i + 1}] (${r.arquivo}${secao})\n${r.chunk.texto}`;
     })
     .join('\n\n');
 
-  return `CONTEXTO:\n${contexto}\n\nPERGUNTA DO CLIENTE:\n${pergunta}`;
+  // Nada passou do limiar, mas a busca achou alguma coisa. Avisar que o
+  // material é fraco é melhor que esconder: medido, "ta entao marca dia 16
+  // mesmo" tira 0.376 e o trecho descartado por essa margem era justamente o
+  // "Como agendar". Sem ele, o modelo responde que não sabe uma coisa que o
+  // documento responde.
+  const cabecalho = incerto
+    ? 'CONTEXTO (nenhum trecho claramente relevante; use só se de fato responder):'
+    : 'CONTEXTO:';
+
+  return `${cabecalho}\n${trechos}\n\nMENSAGEM DO CLIENTE:\n${pergunta}`;
 }

@@ -107,6 +107,25 @@
         color: #555;
       }
 
+      .revisar {
+        font: inherit;
+        font-size: 12px;
+        padding: 4px 10px;
+        border: 1px solid var(--borda);
+        border-radius: 6px;
+        background: #fff;
+        cursor: pointer;
+      }
+
+      .revisar:hover:not(:disabled) {
+        background: #f0f2f3;
+      }
+
+      .revisar:disabled {
+        opacity: 0.5;
+        cursor: default;
+      }
+
       .truncar {
         max-width: 380px;
         overflow: hidden;
@@ -152,6 +171,9 @@
 
     <div class="conteudo">
       <div class="cartoes" id="cartoes"></div>
+
+      <h2>Handoffs para revisar</h2>
+      <div id="handoffs"></div>
 
       <h2>Perguntas sem resposta</h2>
       <div id="unanswered"></div>
@@ -208,6 +230,50 @@
           cartao('Mensagens', p.mensagens.total, p.mensagens.doBot + ' do bot · ' + p.mensagens.latenciaMediaMs + 'ms em média'),
           cartao('Sem resposta', p.perguntasSemResposta.length, 'buracos na base de conhecimento'),
         ].join('');
+
+        // Handoffs pendentes: a fila do colaborador. "bot voltou" quer dizer
+        // que o cliente tocou em "falar com o atendente virtual" e seguiu
+        // sozinho — o atendimento talvez não precise mais dele, mas a pergunta
+        // de por que o bot chamou continua valendo.
+        const handoffs = p.handoffsPendentes;
+        document.getElementById('handoffs').innerHTML =
+          handoffs.length === 0
+            ? '<div class="vazio">Nenhum handoff esperando revisão.</div>'
+            : '<table><thead><tr><th>Contato</th><th>Motivo</th><th>Mensagem</th>' +
+              '<th>Situação</th><th>Quando</th><th></th></tr></thead><tbody>' +
+              handoffs
+                .map(
+                  (h) =>
+                    '<tr><td>' +
+                    escapar(h.contatoId) +
+                    '</td><td>' +
+                    escapar(h.motivo) +
+                    '</td><td class="truncar">' +
+                    escapar(h.pergunta || '—') +
+                    '</td><td>' +
+                    (h.botVoltou
+                      ? '<span class="etiqueta open">bot voltou</span>'
+                      : '<span class="etiqueta handoff">aguardando</span>') +
+                    '</td><td>' +
+                    h.criadoEm +
+                    '</td><td><button class="revisar" data-id="' +
+                    h.id +
+                    '">Revisado</button></td></tr>',
+                )
+                .join('') +
+              '</tbody></table>';
+
+        for (const botao of document.querySelectorAll('.revisar')) {
+          botao.addEventListener('click', async () => {
+            botao.disabled = true;
+            await fetch('/api/handoff/revisar', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ id: Number(botao.dataset.id) }),
+            });
+            atualizar();
+          });
+        }
 
         // Perguntas sem resposta: a lista que diz que documento falta escrever.
         const semResposta = p.perguntasSemResposta;

@@ -75,9 +75,15 @@ describe('Motor.responder', () => {
     expect(chamada?.mensagemDoUsuario).toContain('dezoito horas');
   });
 
-  it('NÃO chama o LLM quando a confiança fica abaixo do limiar', async () => {
-    // Esta é a regra que protege o bolso: pergunta fora da base não vira
-    // chamada paga, vira handoff direto.
+  it('CHAMA o LLM mesmo com confiança baixa, em vez de desistir sozinho', async () => {
+    // Esta regra já foi o contrário: score abaixo do limiar virava handoff sem
+    // passar pelo modelo, "para proteger o bolso". Rodando de verdade, um
+    // "bom diaa" tirou 0.288 e acionou a equipe para retribuir um cumprimento
+    // — e o handoff calou o bot pelo resto da conversa.
+    //
+    // O limiar continua escolhendo o contexto; quem decide se dá para
+    // responder é o modelo, que tem a regra 2 para conversar e a 3 para
+    // escalar. O preço disso é uma chamada barata onde antes havia zero.
     semear(['A clínica abre de segunda a sexta das oito às dezoito horas.']);
 
     const llm = new LlmFake();
@@ -85,15 +91,38 @@ describe('Motor.responder', () => {
 
     const resposta = await motor.responder(SLUG, 'contato-1', 'vocês vendem pizza calabresa');
 
-    expect(llm.chamadas).toHaveLength(0);
-    expect(resposta.precisaDeHumano).toBe(true);
-    expect(resposta.motivoDoHandoff).toBe('baixa_confianca');
-    expect(resposta.texto).toBe(config.resposta.fraseDeHandoff);
-    expect(resposta.fontes).toEqual([]);
-    // Não é zero: o embedding da pergunta foi pago mesmo sem chamar o LLM.
-    // Mas tem de ser ordens de grandeza menor que uma resposta completa.
-    expect(resposta.uso.tokensSaida).toBe(0);
-    expect(resposta.uso.custoEstimadoUsd).toBeLessThan(0.00001);
+    expect(llm.chamadas).toHaveLength(1);
+    expect(resposta.precisaDeHumano).toBe(false);
+  });
+
+  it('manda os melhores trechos, marcados como fracos, quando nada passa do limiar', async () => {
+    // O limiar parou de barrar a mensagem, mas continuava matando o contexto
+    // de fome. Medido: "ta entao marca dia 16 mesmo" tira 0.376 e o trecho
+    // perdido por essa margem era justamente o "Como agendar", que responde a
+    // pergunta. Melhor o modelo ver e descartar do que nunca ver.
+    semear(['A clínica abre de segunda a sexta das oito às dezoito horas.'], {
+      limiarDeConfianca: 0.99,
+    });
+
+    const llm = new LlmFake();
+    const motor = new Motor({ db, embedder: new EmbedderFake(), llm });
+
+    await motor.responder(SLUG, 'contato-1', 'clínica abre segunda sexta');
+
+    const enviado = llm.chamadas[0]?.mensagemDoUsuario ?? '';
+    expect(enviado).toContain('nenhum trecho claramente relevante');
+    expect(enviado).toContain('dezoito horas');
+  });
+
+  it('não marca como fraco o contexto que passou do limiar', async () => {
+    semear(['A clínica abre de segunda a sexta das oito às dezoito horas.']);
+
+    const llm = new LlmFake();
+    const motor = new Motor({ db, embedder: new EmbedderFake(), llm });
+
+    await motor.responder(SLUG, 'contato-1', 'clínica abre segunda sexta horas');
+
+    expect(llm.chamadas[0]?.mensagemDoUsuario).not.toContain('claramente relevante');
   });
 
   it('faz handoff com motivo "sem_chunks" quando o tenant não tem nada indexado', async () => {
@@ -109,18 +138,21 @@ describe('Motor.responder', () => {
   });
 
   it('respeita o limiar configurado no tenant, não só o global', async () => {
-    // Limiar 0.99: quase nada passa, então até a pergunta boa cai em handoff.
+    // O limiar do tenant continua valendo — só que agora ele decide se o
+    // contexto vai marcado como firme ou como fraco, em vez de decidir se
+    // alguém é chamado.
     semear(['A clínica abre de segunda a sexta das oito às dezoito horas.'], {
       limiarDeConfianca: 0.99,
     });
 
-    const llm = new LlmFake();
-    const motor = new Motor({ db, embedder: new EmbedderFake(), llm });
+    const llmRigoroso = new LlmFake();
+    await new Motor({ db, embedder: new EmbedderFake(), llm: llmRigoroso }).responder(
+      SLUG,
+      'contato-1',
+      'clínica abre segunda sexta',
+    );
 
-    const resposta = await motor.responder(SLUG, 'contato-1', 'clínica abre segunda sexta');
-
-    expect(resposta.precisaDeHumano).toBe(true);
-    expect(llm.chamadas).toHaveLength(0);
+    expect(llmRigoroso.chamadas[0]?.mensagemDoUsuario).toContain('nenhum trecho claramente');
   });
 
   it('trata como handoff a resposta em que o próprio modelo desiste', async () => {

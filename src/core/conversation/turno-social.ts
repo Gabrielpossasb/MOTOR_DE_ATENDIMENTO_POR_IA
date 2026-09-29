@@ -30,7 +30,24 @@ interface Expressao {
 }
 
 /**
- * Todas as expressões, das mais longas para as mais curtas.
+ * Colapsa letras repetidas: "bom diaa" vira "bom dia", "oii" vira "oi".
+ *
+ * Nasceu de um caso real: `"bom diaa"` não casava com `\bbom dia\b`, porque a
+ * fronteira depois de "dia" não existe quando vem outra letra. O bot chamou um
+ * atendente para responder a um cumprimento, e a conversa morreu ali.
+ * Esticar a última letra é como se escreve no WhatsApp — "oii", "tardee",
+ * "obrigadoo" — e comparação exata não sobrevive a isso.
+ *
+ * Colapsa dos DOIS lados, mensagem e lista de expressões, para as duas formas
+ * se encontrarem. Não importa que "pessoal" vire "pesoal": importa que vire a
+ * mesma coisa nos dois lados.
+ */
+export function colapsarRepetidas(texto: string): string {
+  return texto.replace(/([a-z0-9])\1+/g, '$1');
+}
+
+/**
+ * Todas as expressões, já colapsadas e das mais longas para as mais curtas.
  *
  * A ordem importa na hora de remover: "tudo bem" precisa sair antes de
  * qualquer coisa que case com "bem", senão sobra a metade da frase e o turno
@@ -38,11 +55,16 @@ interface Expressao {
  */
 const EXPRESSOES: Expressao[] = Object.entries(config.social.expressoes)
   .flatMap(([categoria, frases]) =>
-    frases.map((frase) => ({ categoria: categoria as CategoriaSocial, frase })),
+    frases.map((frase) => ({
+      categoria: categoria as CategoriaSocial,
+      frase: colapsarRepetidas(frase),
+    })),
   )
   .sort((a, b) => b.frase.length - a.frase.length);
 
-const RUIDO = [...config.social.ruido].sort((a, b) => b.length - a.length);
+const RUIDO = [...config.social.ruido]
+  .map(colapsarRepetidas)
+  .sort((a, b) => b.length - a.length);
 
 /**
  * Diz se a mensagem é puramente social e de qual tipo.
@@ -51,7 +73,7 @@ const RUIDO = [...config.social.ruido].sort((a, b) => b.length - a.length);
  * responde é o caminho normal com busca.
  */
 export function classificarTurnoSocial(texto: string): CategoriaSocial | undefined {
-  const normalizado = normalizar(texto);
+  const normalizado = colapsarRepetidas(normalizar(texto));
   if (normalizado.length === 0) return undefined;
 
   const achados = localizarExpressoes(normalizado);

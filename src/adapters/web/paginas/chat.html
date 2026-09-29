@@ -74,6 +74,40 @@
         text-align: center;
       }
 
+      /*
+       * Botões de ação, no lugar onde o WhatsApp põe os botões de resposta:
+       * embaixo da mensagem, largos e fáceis de tocar.
+       */
+      .acoes {
+        align-self: center;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+        justify-content: center;
+        max-width: 90%;
+      }
+
+      .acoes button {
+        font: inherit;
+        font-size: 13px;
+        font-weight: 600;
+        color: var(--verde-escuro);
+        background: #fff;
+        border: 1px solid var(--verde-escuro);
+        border-radius: 18px;
+        padding: 7px 16px;
+        cursor: pointer;
+      }
+
+      .acoes button:hover:not(:disabled) {
+        background: #e7f6ec;
+      }
+
+      .acoes button:disabled {
+        opacity: 0.5;
+        cursor: default;
+      }
+
       .digitando {
         align-self: flex-start;
         color: var(--texto-fraco);
@@ -199,6 +233,60 @@
         rolarParaOFim();
       }
 
+      /**
+       * Desenha as ações que o núcleo ofereceu.
+       *
+       * O núcleo devolve id e rótulo e não sabe que viraram botão. No WhatsApp
+       * estas mesmas ações viram botões de resposta, sem nada mudar no motor.
+       *
+       * Só a última leva de botões fica clicável: deixar botões velhos ativos
+       * no meio da conversa faria o cliente destravar algo que já estava
+       * destravado.
+       */
+      function adicionarAcoes(acoes) {
+        for (const antigo of elMensagens.querySelectorAll('.acoes')) antigo.remove();
+        if (!acoes || acoes.length === 0) return;
+
+        const caixa = document.createElement('div');
+        caixa.className = 'acoes';
+
+        for (const acao of acoes) {
+          const botao = document.createElement('button');
+          botao.type = 'button';
+          botao.textContent = acao.rotulo;
+          botao.addEventListener('click', () => executarAcao(acao.id, caixa));
+          caixa.appendChild(botao);
+        }
+
+        elMensagens.appendChild(caixa);
+        rolarParaOFim();
+      }
+
+      async function executarAcao(acaoId, caixa) {
+        for (const botao of caixa.querySelectorAll('button')) botao.disabled = true;
+
+        try {
+          const resposta = await fetch('/api/acao', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ contatoId, acaoId }),
+          });
+          const dados = await resposta.json();
+
+          if (!resposta.ok) {
+            adicionarAviso('Erro: ' + (dados.erro || resposta.status));
+            return;
+          }
+
+          caixa.remove();
+          adicionarBalao(dados.texto, 'bot');
+          elEntrada.focus();
+        } catch (erro) {
+          adicionarAviso('Falha de rede: ' + erro.message);
+          for (const botao of caixa.querySelectorAll('button')) botao.disabled = false;
+        }
+      }
+
       function formatarMeta(resposta) {
         const uso = resposta.uso;
         const fontes = resposta.fontes
@@ -238,7 +326,8 @@
           // Conversa já com um humano: o bot não manda nada. No WhatsApp isso
           // seria silêncio; aqui mostramos o estado para você enxergar.
           if (dados.aguardandoHumano) {
-            adicionarAviso('Esta conversa já foi passada para um atendente. O bot não responde mais.');
+            adicionarAviso('Esta conversa está com um atendente. O bot não responde enquanto isso.');
+            adicionarAcoes(dados.acoes);
             return;
           }
 
@@ -247,6 +336,8 @@
           if (dados.precisaDeHumano) {
             adicionarAviso('Handoff registrado (' + dados.motivoDoHandoff + '). A equipe foi acionada.');
           }
+
+          adicionarAcoes(dados.acoes);
         } catch (erro) {
           digitando.remove();
           adicionarAviso('Falha de rede: ' + erro.message);

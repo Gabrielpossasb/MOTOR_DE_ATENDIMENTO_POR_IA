@@ -7,7 +7,13 @@
  */
 import type { Db } from '../../storage/db.js';
 import { carregarTenant, configEfetiva } from '../tenant/tenant-service.js';
-import { listarPerguntasSemResposta, type PerguntaSemResposta } from '../../storage/repositories/handoffs.js';
+import {
+  conversasQueTiveramHandoff,
+  listarHandoffsPendentes,
+  listarPerguntasSemResposta,
+  type HandoffPendente,
+  type PerguntaSemResposta,
+} from '../../storage/repositories/handoffs.js';
 
 export interface ResumoDeConversa {
   id: number;
@@ -48,6 +54,8 @@ export interface PainelDoTenant {
     acumuladoUsd: number;
     medioPorMensagemUsd: number;
   };
+  /** Handoffs que ninguem da equipe revisou ainda. */
+  handoffsPendentes: HandoffPendente[];
   perguntasSemResposta: PerguntaSemResposta[];
   listaDeConversas: ResumoDeConversa[];
 }
@@ -79,11 +87,21 @@ export function montarPainel(db: Db, slug: string, limiteDeConversas = 50): Pain
 
   const doBot = mensagens.do_bot ?? 0;
 
+  // Conta conversas que TIVERAM handoff, e não as que estão em handoff agora.
+  //
+  // Desde que existe o botão de trazer o bot de volta, a conversa volta para
+  // `open` com o handoff ainda pendente. Olhar só o status faria uma conversa
+  // que precisou chamar a equipe aparecer como resolvida pelo bot — e é
+  // justamente esse caso que a métrica existe para não esconder.
+  const tiveramHandoff = conversasQueTiveramHandoff(db, tenant.id);
+
   return {
     tenant: { slug: tenant.slug, nome: tenant.nome },
     ajustes: configEfetiva(tenant),
     conversas: { total: totalDeConversas, abertas, emHandoff, fechadas },
-    taxaDeResolucao: totalDeConversas === 0 ? 0 : (totalDeConversas - emHandoff) / totalDeConversas,
+    taxaDeResolucao:
+      totalDeConversas === 0 ? 0 : (totalDeConversas - tiveramHandoff) / totalDeConversas,
+    handoffsPendentes: listarHandoffsPendentes(db, tenant.id),
     mensagens: {
       total: mensagens.total,
       doBot,

@@ -159,14 +159,15 @@ tests/
 Estão em `src/core/llm/prompts.ts` e valem para todo tenant:
 
 1. Responde só com base nos chunks recuperados **daquele** tenant.
-2. Sem chunk relevante (ou confiança abaixo do limiar): responde que vai chamar
-   alguém da equipe. Nesse caso o LLM nem é chamado — não se paga por uma
-   resposta que já se sabe que não existe.
-   **Exceção:** saudação, agradecimento, despedida e confirmação ("oi",
-   "obrigado", "tchau", "ok") nem chegam na busca. São turno social, respondidos
-   com um prompt próprio, sem contexto e sem acionar ninguém — senão o bot
-   chamaria um atendente para retribuir um "boa tarde", e ficaria mudo pelo
-   resto da conversa.
+2. O limiar NÃO barra mensagem nenhuma. Toda mensagem chega ao modelo, que
+   decide entre conversar (quando não é pergunta sobre o negócio) e escalar
+   (quando é pergunta e o contexto não responde). O limiar só escolhe se o
+   contexto vai como firme ou marcado como fraco.
+   Saudação, agradecimento e despedida nem chegam à busca: são turno social,
+   com prompt próprio e sem acionar ninguém.
+   Depois de um handoff o bot fica mudo, mas oferece sempre o botão
+   **Falar com o atendente virtual**, que destrava a conversa sem apagar o
+   aviso pendente para a equipe.
 3. Nunca inventa preço, prazo, horário ou disponibilidade.
 4. No máximo 3 linhas, cortadas no código se o modelo passar.
 5. Uma mensagem por resposta.
@@ -297,7 +298,7 @@ conversa com janela de contexto, handoff persistido, contabilidade de custo por
 mensagem, adaptador web com painel e bateria de testes, suíte de avaliação com
 logs e medição de estabilidade.
 
-267 testes unitários offline. Última medição: **100% de acurácia e 100% de
+308 testes unitários offline. Última medição: **100% de acurácia e 100% de
 estabilidade** em 5 rodadas consecutivas.
 
 **Próximo passo natural:** trocar os documentos da clínica fictícia pelos de um

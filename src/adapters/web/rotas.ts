@@ -17,6 +17,7 @@ import { config } from '../../config.js';
 import type { Db } from '../../storage/db.js';
 import type { Motor } from '../../core/engine.js';
 import { montarPainel } from '../../core/painel/painel-service.js';
+import { marcarHandoffRevisado } from '../../storage/repositories/handoffs.js';
 import { ultimasMensagens } from '../../storage/repositories/messages.js';
 import { encerrarConversa } from '../../core/conversation/conversation-service.js';
 import { carregarTenant, configEfetiva } from '../../core/tenant/tenant-service.js';
@@ -87,6 +88,42 @@ export async function tratar(
     }
 
     responderJson(res, 200, await ctx.motor.responder(ctx.slug, contatoId, texto, { canal: 'web' }));
+    return;
+  }
+
+  // O cliente tocou numa ação em vez de escrever. Rota própria porque não é
+  // mensagem: mandar o rótulo do botão como texto obrigaria o núcleo a
+  // adivinhar a intenção pela frase, que é o que o botão evita.
+  if (req.method === 'POST' && rota === '/api/acao') {
+    const corpo = await lerCorpo(req);
+    const contatoId = typeof corpo.contatoId === 'string' ? corpo.contatoId : '';
+    const acaoId = typeof corpo.acaoId === 'string' ? corpo.acaoId : '';
+
+    if (contatoId.length === 0 || acaoId.length === 0) {
+      responderJson(res, 400, { erro: 'Informe contatoId e acaoId.' });
+      return;
+    }
+
+    if (acaoId !== 'voltar_ao_bot') {
+      responderJson(res, 400, { erro: `Ação desconhecida: ${acaoId}` });
+      return;
+    }
+
+    responderJson(res, 200, await ctx.motor.executarAcao(ctx.slug, contatoId, acaoId));
+    return;
+  }
+
+  if (req.method === 'POST' && rota === '/api/handoff/revisar') {
+    const corpo = await lerCorpo(req);
+    const id = Number(corpo.id);
+
+    if (!Number.isInteger(id) || id <= 0) {
+      responderJson(res, 400, { erro: 'Informe o id do handoff.' });
+      return;
+    }
+
+    const tenant = carregarTenant(ctx.db, ctx.slug);
+    responderJson(res, 200, { revisado: marcarHandoffRevisado(ctx.db, tenant.id, id) });
     return;
   }
 

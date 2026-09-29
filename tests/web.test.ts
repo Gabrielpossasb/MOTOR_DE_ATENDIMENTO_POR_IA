@@ -18,7 +18,7 @@ import type { PainelDoTenant } from '../src/core/painel/painel-service.js';
 import type { MensagemGravada } from '../src/storage/repositories/messages.js';
 import type { RegistroDeAvaliacao } from '../src/core/avaliacao/log.js';
 import { EmbedderFake, vetorDeTexto } from './helpers/fake-embedder.js';
-import { LlmFake } from './helpers/fake-llm.js';
+import { LlmQueDesiste } from './helpers/fake-llm.js';
 
 const SLUG = 'clinica';
 const TEXTO = 'A clínica abre de segunda a sexta das oito às dezoito horas.';
@@ -67,7 +67,7 @@ beforeEach(async () => {
   db = abrirBanco(':memory:');
   semear();
 
-  const motor = new Motor({ db, embedder: new EmbedderFake(), llm: new LlmFake() });
+  const motor = new Motor({ db, embedder: new EmbedderFake(), llm: new LlmQueDesiste() });
   servidor = criarServidor({ motor, db, slug: SLUG });
 
   // Porta 0: o sistema escolhe uma livre, então os testes não brigam entre si
@@ -103,13 +103,16 @@ describe('POST /api/mensagem', () => {
     // Se o corpo não for lido como UTF-8, "crianças" chega quebrado ao
     // embedding e a busca degrada silenciosamente.
     const comAcento = 'vocês atendem crianças? é urgente';
-    await mandar(comAcento, 'contato-utf8');
+    const resposta = await corpo<RespostaDoBot>(await mandar(comAcento, 'contato-utf8'));
 
-    const painel = await corpo<PainelDoTenant>(await fetch(`${base}/api/painel`));
-    const conversa = painel.listaDeConversas.find((c) => c.contatoId === 'contato-utf8');
+    // Confere na mensagem gravada, e não na lista de perguntas sem resposta:
+    // desde que o limiar deixou de barrar, esta pergunta é respondida em vez
+    // de virar handoff — mas a acentuação continua tendo de sobreviver.
+    const dados = await corpo<{ mensagens: MensagemGravada[] }>(
+      await fetch(`${base}/api/conversa?id=${resposta.conversaId}`),
+    );
 
-    expect(conversa).toBeDefined();
-    expect(painel.perguntasSemResposta.some((u) => u.pergunta === comAcento)).toBe(true);
+    expect(dados.mensagens[0]?.conteudo).toBe(comAcento);
   });
 
   it('recusa corpo sem contatoId ou sem texto', async () => {

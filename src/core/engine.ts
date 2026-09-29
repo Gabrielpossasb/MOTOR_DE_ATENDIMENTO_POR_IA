@@ -30,9 +30,15 @@ import {
   ultimaPerguntaDoCliente,
 } from './conversation/conversation-service.js';
 import { gravarMensagem } from '../storage/repositories/messages.js';
-import { marcarAtividade, mudarStatus, obterOuCriarConversa } from '../storage/repositories/conversations.js';
+import {
+  conversaAtiva,
+  marcarAtividade,
+  mudarStatus,
+  obterOuCriarConversa,
+} from '../storage/repositories/conversations.js';
 import { registrarHandoff, registrarPerguntaSemResposta } from '../storage/repositories/handoffs.js';
 import type {
+  AcaoSugerida,
   CategoriaSocial,
   Fonte,
   MotivoDeHandoff,
@@ -49,6 +55,18 @@ export interface DependenciasDoMotor {
   /** Opcional: por padrão usa a busca por cosseno em memória. */
   busca?: BuscaVetorial;
 }
+
+/**
+ * A ação de trazer o bot de volta depois de um handoff.
+ *
+ * O rótulo mora aqui e não no adaptador porque é texto que o cliente lê — e o
+ * núcleo é quem sabe o que a ação significa. O canal escolhe só a forma:
+ * botão de resposta no WhatsApp, botão na página, comando no terminal.
+ */
+const ACAO_VOLTAR: AcaoSugerida = {
+  id: 'voltar_ao_bot',
+  rotulo: 'Falar com o atendente virtual',
+};
 
 export interface OpcoesDeResposta {
   /** De onde veio a mensagem. Só é guardado para relatório; o núcleo não lê. */
@@ -98,6 +116,12 @@ export class Motor {
 
     // Conversa já entregue a um humano: o bot cala a boca. Continuar
     // respondendo atropelaria o atendente no meio do atendimento.
+    //
+    // Mas a ação vai junto em TODA resposta muda, e não só na que gerou o
+    // handoff. Antes isto era uma porta sem maçaneta: o cliente escrevia
+    // "opa", levava "o bot não responde mais" e não tinha o que fazer. Com o
+    // botão sempre à vista ele nunca fica sem saída, e ninguém precisa
+    // adivinhar intenção a partir do texto.
     if (conversa && conversa.status === 'handoff' && config.conversa.bloquearBotAposHandoff) {
       return {
         texto: '',
@@ -108,6 +132,7 @@ export class Motor {
         uso: { tokensEntrada: 0, tokensSaida: 0, custoEstimadoUsd: 0, latenciaMs: Date.now() - inicio },
         conversaId: conversa.id,
         aguardandoHumano: true,
+        acoes: [ACAO_VOLTAR],
       };
     }
 
@@ -191,14 +216,21 @@ export class Motor {
       }
     }
 
-    // 4. Confiança baixa: nem chama o LLM. Economiza dinheiro e evita que o
-    //    modelo invente resposta em cima de contexto irrelevante.
-    if (resultados.length === 0 || melhorScore < ajustes.limiarDeConfianca) {
+    // 4. Base literalmente vazia: aí sim não há o que responder, e pagar uma
+    //    chamada para descobrir isso seria desperdício.
+    //
+    //    O que NÃO está mais aqui: a saída seca por score abaixo do limiar.
+    //    Ela matava conversa — "bom diaa" tirou 0.288, foi barrado antes do
+    //    modelo e acionou a equipe para retribuir um cumprimento. O limiar
+    //    continua escolhendo o contexto e alimentando `melhorScore`, mas quem
+    //    julga se dá para responder passou a ser o modelo, que tem a regra 2
+    //    para conversar e a 3 para escalar.
+    if (resultados.length === 0) {
       return this.encerrarSemResposta({
         tenant,
         conversaId: conversa?.id,
         pergunta: textoDaPergunta,
-        motivo: resultados.length === 0 ? 'sem_chunks' : 'baixa_confianca',
+        motivo: 'sem_chunks',
         melhorScore,
         custoEmbedding,
         inicio,
@@ -208,7 +240,17 @@ export class Motor {
 
     // 5. Só os chunks acima do limiar viram contexto — um chunk ruim no meio do
     //    prompt só confunde o modelo e ainda é pago por token.
-    const relevantes = resultados.filter((r) => r.score >= ajustes.limiarDeConfianca);
+    const acimaDoLimiar = resultados.filter((r) => r.score >= ajustes.limiarDeConfianca);
+
+    // Quando NADA passa, manda os melhores assim mesmo, avisando que são
+    // fracos. O limiar deixou de barrar a mensagem, mas continuava matando o
+    // contexto de fome: medido, "ta entao marca dia 16 mesmo" tira 0.376 e o
+    // trecho perdido por essa margem era o "Como agendar", que responde a
+    // pergunta. Melhor o modelo ver e descartar do que nunca ver.
+    const incerto = acimaDoLimiar.length === 0;
+    const relevantes = incerto
+      ? resultados.slice(0, config.busca.chunksQuandoNadaPassa)
+      : acimaDoLimiar;
 
     // Compacta antes de montar o contexto, para este turno já ver a memória.
     const compactacao = conversa
@@ -221,7 +263,7 @@ export class Motor {
 
     const resposta = await this.llm.responder(
       montarPromptDoSistema(tenant.promptDoSistema, contexto.resumo),
-      montarMensagemComContexto(textoDaPergunta, relevantes),
+      montarMensagemComContexto(textoDaPergunta, relevantes, incerto),
       contexto.historico,
     );
 
@@ -268,6 +310,7 @@ export class Motor {
       fontes,
       precisaDeHumano: desistiu,
       ...(desistiu ? { motivoDoHandoff: 'baixa_confianca' as const } : {}),
+      ...(desistiu && conversa ? { acoes: [ACAO_VOLTAR] } : {}),
       melhorScore,
       uso: {
         tokensEntrada,
@@ -276,6 +319,77 @@ export class Motor {
         latenciaMs,
       },
       ...(conversa ? { conversaId: conversa.id } : {}),
+      aguardandoHumano: false,
+    };
+  }
+
+  /**
+   * Executa uma ação que o cliente tocou, em vez de uma mensagem que escreveu.
+   *
+   * Entrada separada de `responder()` de propósito: tocar num botão não é
+   * mandar uma mensagem. Se viesse como texto, o motor teria de adivinhar a
+   * intenção a partir da frase do rótulo — que é exatamente o que o botão
+   * existe para não precisar.
+   *
+   * Hoje só existe `voltar_ao_bot`, que devolve a conversa para `open`. O
+   * handoff NÃO é tocado: o colaborador continua tendo de olhar por que foi
+   * chamado, mesmo que o cliente tenha seguido sozinho.
+   */
+  async executarAcao(
+    tenantSlug: string,
+    contatoId: string,
+    acaoId: string,
+  ): Promise<RespostaDoBot> {
+    const inicio = Date.now();
+
+    if (acaoId !== 'voltar_ao_bot') {
+      throw new Error(`Ação desconhecida: ${acaoId}`);
+    }
+
+    const tenant = carregarTenant(this.db, tenantSlug);
+    const conversa = conversaAtiva(this.db, tenant.id, contatoId);
+
+    const semCusto = {
+      tokensEntrada: 0,
+      tokensSaida: 0,
+      custoEstimadoUsd: 0,
+      latenciaMs: Date.now() - inicio,
+    };
+
+    // Nada a destravar: conversa nova, ou o bot já estava respondendo.
+    if (!conversa || conversa.status !== 'handoff') {
+      return {
+        texto: config.resposta.fraseDeRetomada,
+        fontes: [],
+        precisaDeHumano: false,
+        melhorScore: 0,
+        uso: semCusto,
+        ...(conversa ? { conversaId: conversa.id } : {}),
+        aguardandoHumano: false,
+      };
+    }
+
+    mudarStatus(this.db, conversa.id, 'open');
+
+    const texto = config.resposta.fraseDeRetomada;
+    gravarMensagem(this.db, {
+      conversaId: conversa.id,
+      papel: 'assistant',
+      conteudo: texto,
+      tokensEntrada: 0,
+      tokensSaida: 0,
+      custoUsd: 0,
+      latenciaMs: Date.now() - inicio,
+      fontes: [],
+    });
+
+    return {
+      texto,
+      fontes: [],
+      precisaDeHumano: false,
+      melhorScore: 0,
+      uso: semCusto,
+      conversaId: conversa.id,
       aguardandoHumano: false,
     };
   }
@@ -353,6 +467,7 @@ export class Motor {
       fontes: [],
       precisaDeHumano: desistiu,
       ...(desistiu ? { motivoDoHandoff: 'baixa_confianca' as const } : {}),
+      ...(desistiu && dados.conversaId !== undefined ? { acoes: [ACAO_VOLTAR] } : {}),
       turnoSocial: dados.categoria,
       melhorScore: 0,
       uso: {
@@ -419,6 +534,7 @@ export class Motor {
       },
       ...(dados.conversaId !== undefined ? { conversaId: dados.conversaId } : {}),
       aguardandoHumano: false,
+      ...(dados.persistir && dados.conversaId !== undefined ? { acoes: [ACAO_VOLTAR] } : {}),
     };
   }
 

@@ -38,7 +38,7 @@ Comandos de qualidade:
 | Comando | O que faz | Custo |
 |---|---|---|
 | `npm run novo-tenant -- <slug> "<Nome>"` | cria a pasta de um cliente novo com modelos | zero |
-| `npm test` | 267 testes unitários, offline | zero |
+| `npm test` | 308 testes unitários, offline | zero |
 | `npm run typecheck` | checagem de tipos | zero |
 | `npm run calibrar -- <slug>` | mede scores de busca para ajustar o limiar | ~US$ 0,000005 |
 | `npm run avaliar -- <slug>` | 24 perguntas contra a API real, gera logs | ~US$ 0,01 |
@@ -123,7 +123,7 @@ Estado de conversa, handoff persistido, contabilidade e política de testes.
 **Dois tipos, separados de propósito.** Juntos os dois pioram: o determinístico
 fica lento e caro, o não-determinístico some no ruído.
 
-**`npm test`** — 267 testes unitários, offline, grátis, ~3s. Rode a cada
+**`npm test`** — 308 testes unitários, offline, grátis, ~3s. Rode a cada
 salvamento. Embedder e LLM são sempre dublês; **nenhum teste unitário toca a
 rede**. Um teste só entra se falha por *um* motivo nomeável, se o nome descreve
 comportamento (não implementação), e — quando nasce de bug real — traz comentário
@@ -174,7 +174,7 @@ um `"damos 10% de desconto"` inventado passaria. Corrigido, com teste.
 
 ---
 
-## Calibração: o limiar é porteiro, não juiz
+## Calibração: o limiar deixou de ser porteiro (revisto em 2026-09-29)
 
 `npm run calibrar` mediu 24 perguntas e mostrou que os dois grupos **se sobrepõem**:
 
@@ -186,12 +186,33 @@ um `"damos 10% de desconto"` inventado passaria. Corrigido, com teste.
 `"qual o CNPJ da clínica?"` tira 0,593 porque *fala* da clínica — só que a
 resposta não existe nos documentos. **Nenhum número separa os dois grupos.**
 
-Por isso o limiar (0,40) fica **abaixo da pergunta legítima mais fraca**: nunca
-barra cliente de verdade, e ainda filtra de graça o que é claramente fora do
-assunto. Quem julga o resto é o LLM.
+Esse raciocínio continua valendo, e foi ele que acabou derrubando o papel de
+porteiro. Enquanto o limiar decidia quem chegava ao modelo, ele errava para o
+lado mais caro: `"bom diaa"` tirou **0,288**, foi barrado, virou handoff — e
+como handoff cala o bot, a conversa inteira morreu. Um número que não separa os
+dois grupos também não separa "cumprimento" de "pergunta sem resposta".
+
+**Hoje o limiar não barra ninguém.** Ele faz duas coisas menores:
+
+1. decide se o contexto vai ao modelo como firme ou marcado como fraco;
+2. alimenta o `melhorScore`, que é o dado de calibração no painel.
+
+Quem julga se dá para responder é o modelo, que tem uma regra para conversar
+(mensagem que não é pergunta) e outra para escalar (pergunta que o contexto não
+responde). E quando **nada** passa do limiar, os dois melhores trechos vão junto
+assim mesmo, avisados como fracos — porque o limiar estava matando o contexto de
+fome: `"tem onde parar o carro?"` tira 0,329 e o trecho descartado dizia
+*"temos estacionamento próprio e gratuito, com seis vagas"*. Com o trecho na
+mão, o bot responde certo; sem ele, chamava um atendente.
+
+**O que isso custou, medido:** pergunta fora do assunto passou de US$ 0 para
+~US$ 0,0004, porque agora chega ao modelo. O desfecho não muda — o modelo recusa
+igual, e o handoff acontece do mesmo jeito. Comprar 0,04 centavo para não matar
+conversa é troca boa.
 
 Rode `calibrar` de novo sempre que trocar o modelo de embeddings ou mexer
-bastante nos documentos.
+bastante nos documentos. O número continua importando; só não manda mais em
+quem é atendido.
 
 ---
 
@@ -596,6 +617,68 @@ por palavra-chave teria falso negativo justamente nas elípticas sem conectivo
 Isso quebrou um teste do painel que contava com o limiar barrar a pergunta ruim.
 O teste é do painel, não da recuperação — passou a controlar o handoff com um
 dublê próprio, e agora vale com ou sem a segunda tentativa.
+
+---
+
+## A conversa não trava mais (2026-09-29)
+
+`"bom diaa"` recebeu *"Não tenho essa informação aqui. Vou chamar alguém da
+equipe"*, score 0,288 — e a conversa morreu ali: o `"opa"` seguinte já levou
+*"Esta conversa já foi passada para um atendente"*.
+
+Duas causas, e **em nenhuma o modelo errou**: a mensagem nunca chegou nele.
+
+### 1. Alongamento derrubava o classificador social
+Ele montava `\bbom dia\b`; em `"bom diaa"` a fronteira depois de "dia" não
+existe, porque vem outra letra. `oii`, `tardee`, `obrigadoo` — o jeito como se
+escreve no WhatsApp — passavam batido.
+
+Conserto: colapsar letras repetidas antes de comparar, **dos dois lados**,
+mensagem e lista. Não importa que "pessoal" vire "pesoal": importa que vire a
+mesma coisa nos dois lados. Os testes de falso positivo continuam valendo —
+`"oito reais?"`, `"bolacha"`, `"até que horas"` seguem não sendo saudação.
+
+### 2. Handoff era porta sem maçaneta
+Depois dele o bot calava para sempre. O cliente não tinha como voltar.
+
+Conserto: **ações sugeridas**, um tipo novo que o núcleo devolve sem saber que
+viram botão. No WhatsApp serão botões de resposta; na página, botões; no
+terminal, um comando. Foi escolha do usuário fazer por botão e não por
+adivinhação — ação explícita não erra intenção.
+
+A ação acompanha a resposta que gerou o handoff **e toda resposta muda
+seguinte**, então o cliente nunca fica sem saída. Texto livre com o bot mudo
+continua sem resposta, de propósito: o botão está sempre à vista.
+
+`Motor.executarAcao()` é entrada separada de `responder()`, porque tocar num
+botão não é mandar uma mensagem — se viesse como texto, o motor teria de
+adivinhar a intenção pelo rótulo, que é o que o botão evita.
+
+### 3. Separar "humano precisa olhar" de "bot está mudo"
+As duas coisas eram a mesma: `status = 'handoff'`. Com o botão, a conversa volta
+para `open` e o handoff **continua pendente** — o colaborador ainda precisa ver
+por que foi chamado. Migration `004` traz `handoffs.resolved_at`.
+
+Isso obrigou a corrigir a taxa de resolução: ela contava `status = 'handoff'`, e
+depois da volta o status é `open`, então uma conversa que precisou de gente
+passaria a contar como resolvida. Agora conta **conversas que tiveram algum
+handoff**, olhando a tabela. O painel ganhou a fila de handoffs pendentes, com
+"bot voltou" marcado e botão de revisado.
+
+### Medido contra a API real
+
+| mensagem | antes | depois |
+|---|---|---|
+| `bom diaa` | handoff, conversa morta | *"Bom diaaa! 😊 Como posso te ajudar hoje?"* |
+| `opa` (bot mudo) | "o bot não responde mais", sem saída | mesma mensagem, **com o botão** |
+| botão | não existia | destrava, e o handoff segue pendente |
+| `tem onde parar o carro?` (0,329) | handoff | *"Sim, temos estacionamento próprio e gratuito, com seis vagas."* |
+
+### O que NÃO foi resolvido
+`"ta entao marca dia 16 mesmo"` continua virando handoff. O chunk certo é
+enviado (0,376, "Como agendar"), o modelo vê e recusa assim mesmo — porque é um
+pedido para **agendar**, e o bot ainda não sabe agendar. Isso é a fase do bot na
+agenda, não um bug desta.
 
 ---
 

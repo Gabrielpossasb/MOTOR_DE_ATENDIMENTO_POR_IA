@@ -96,6 +96,14 @@ export const config = {
      * uma chamada ao modelo.
      */
     tentarComContextoDaConversa: true,
+
+    /**
+     * Quantos trechos mandar quando NENHUM passa do limiar.
+     *
+     * Dois, e nao os quatro do topK: se nem o melhor era bom, encher o
+     * prompt de trecho fraco so confunde o modelo e custa token.
+     */
+    chunksQuandoNadaPassa: 2,
   },
 
   /** Adaptador web (simulador, painel e bateria de testes). */
@@ -302,6 +310,14 @@ export const config = {
      * detectamos. Se você mudar `fraseDeHandoff`, ajuste este trecho também.
      */
     marcadorDeHandoff: 'vou chamar alguém da equipe',
+
+    /**
+     * Resposta ao cliente que tocou em "falar com o atendente virtual".
+     *
+     * Curta de proposito: quem tocou no botao quer continuar o assunto, nao
+     * ler uma saudacao nova.
+     */
+    fraseDeRetomada: 'Voltei! Pode continuar, estou aqui.',
   },
 } as const;
 

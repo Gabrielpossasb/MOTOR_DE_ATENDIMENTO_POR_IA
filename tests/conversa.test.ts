@@ -21,13 +21,15 @@ import {
 } from '../src/storage/repositories/messages.js';
 import {
   listarHandoffs,
+  listarHandoffsPendentes,
   listarPerguntasSemResposta,
 } from '../src/storage/repositories/handoffs.js';
 import { janelaDeContexto } from '../src/core/conversation/conversation-service.js';
 import { Motor } from '../src/core/engine.js';
 import { config } from '../src/config.js';
 import { EmbedderFake, vetorDeTexto } from './helpers/fake-embedder.js';
-import { LlmFake } from './helpers/fake-llm.js';
+import { LlmFake, LlmQueDesiste } from './helpers/fake-llm.js';
+import type { LlmClient } from '../src/core/llm/client.js';
 
 const SLUG = 'clinica';
 const TEXTO_INDEXADO = 'A clínica abre de segunda a sexta das oito às dezoito horas.';
@@ -59,7 +61,14 @@ function semearTenant(slug = SLUG): number {
   return tenant.id;
 }
 
-function motorCom(llm = new LlmFake()): Motor {
+/**
+ * O dublê padrão desiste na pergunta fora do assunto.
+ *
+ * Desde que o limiar deixou de barrar, o handoff é decisão do modelo. Quem
+ * testa handoff aqui precisa de um modelo que desista; quem testa o resto
+ * passa o seu próprio.
+ */
+function motorCom(llm: LlmClient = new LlmQueDesiste()): Motor {
   return new Motor({ db, embedder: new EmbedderFake(), llm });
 }
 
@@ -264,7 +273,7 @@ describe('handoff persistido', () => {
   it('o bot para de responder depois que a conversa vai para um humano', async () => {
     // Continuar respondendo atropelaria o atendente no meio do atendimento.
     semearTenant();
-    const llm = new LlmFake();
+    const llm = new LlmQueDesiste();
     const motor = motorCom(llm);
 
     await motor.responder(SLUG, 'contato-1', PERGUNTA_RUIM);
@@ -276,6 +285,63 @@ describe('handoff persistido', () => {
     expect(seguinte.texto).toBe('');
     expect(seguinte.motivoDoHandoff).toBe('aguardando_humano');
     expect(llm.chamadas).toHaveLength(chamadasAntes);
+  });
+
+  it('mas oferece a ação de trazer o bot de volta, em toda mensagem muda', async () => {
+    // Antes isto era porta sem maçaneta: o cliente escrevia de novo, levava
+    // "o bot não responde mais" e ficava sem saída nenhuma.
+    semearTenant();
+    const motor = motorCom();
+
+    const comHandoff = await motor.responder(SLUG, 'contato-1', PERGUNTA_RUIM);
+    const muda = await motor.responder(SLUG, 'contato-1', PERGUNTA_BOA);
+
+    expect(comHandoff.acoes?.[0]?.id).toBe('voltar_ao_bot');
+    expect(muda.acoes?.[0]?.id).toBe('voltar_ao_bot');
+  });
+
+  it('a ação destrava a conversa e o bot volta a responder', async () => {
+    semearTenant();
+    const motor = motorCom();
+
+    await motor.responder(SLUG, 'contato-1', PERGUNTA_RUIM);
+    const volta = await motor.executarAcao(SLUG, 'contato-1', 'voltar_ao_bot');
+    const depois = await motor.responder(SLUG, 'contato-1', PERGUNTA_BOA);
+
+    expect(volta.texto).toBe(config.resposta.fraseDeRetomada);
+    expect(buscarConversa(db, volta.conversaId as number)?.status).toBe('open');
+    expect(depois.aguardandoHumano).toBe(false);
+    expect(depois.texto.length).toBeGreaterThan(0);
+  });
+
+  it('o handoff CONTINUA pendente depois de o bot voltar', async () => {
+    // O colaborador ainda precisa ver por que foi chamado, mesmo que o cliente
+    // tenha seguido sozinho. Destravar a conversa não apaga o aviso.
+    const tenantId = semearTenant();
+    const motor = motorCom();
+
+    await motor.responder(SLUG, 'contato-1', PERGUNTA_RUIM);
+    await motor.executarAcao(SLUG, 'contato-1', 'voltar_ao_bot');
+
+    const pendentes = listarHandoffsPendentes(db, tenantId);
+    expect(pendentes).toHaveLength(1);
+    expect(pendentes[0]?.botVoltou).toBe(true);
+  });
+
+  it('a ação não quebra quando não há nada para destravar', async () => {
+    semearTenant();
+    const motor = motorCom();
+
+    const semConversa = await motor.executarAcao(SLUG, 'contato-novo', 'voltar_ao_bot');
+    expect(semConversa.aguardandoHumano).toBe(false);
+    expect(semConversa.texto.length).toBeGreaterThan(0);
+  });
+
+  it('recusa ação desconhecida em vez de fazer algo silencioso', async () => {
+    semearTenant();
+    await expect(motorCom().executarAcao(SLUG, 'contato-1', 'apagar_tudo')).rejects.toThrow(
+      /desconhecida/,
+    );
   });
 
   it('também registra handoff quando é o modelo que desiste', async () => {

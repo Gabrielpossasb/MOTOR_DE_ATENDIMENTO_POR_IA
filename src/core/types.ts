@@ -102,6 +102,19 @@ export type MotivoDeHandoff =
  */
 export type CategoriaSocial = 'saudacao' | 'agradecimento' | 'despedida' | 'confirmacao';
 
+/**
+ * Uma ação que o cliente pode tomar, oferecida junto com a resposta.
+ *
+ * O núcleo NÃO sabe que existe botão: devolve a ação, e cada borda desenha do
+ * seu jeito — botão de resposta no WhatsApp, botão na página, comando no
+ * terminal. É o que faz o canal continuar sendo adaptador.
+ */
+export interface AcaoSugerida {
+  /** Identificador estável; é o que a borda manda de volta. */
+  id: 'voltar_ao_bot';
+  rotulo: string;
+}
+
 /** O que o núcleo devolve para qualquer adaptador. */
 export interface RespostaDoBot {
   texto: string;
@@ -111,6 +124,8 @@ export interface RespostaDoBot {
   motivoDoHandoff?: MotivoDeHandoff;
   /** Preenchido quando a mensagem foi tratada como turno social, sem busca. */
   turnoSocial?: CategoriaSocial;
+  /** Ações oferecidas ao cliente. Hoje, só a de trazer o bot de volta. */
+  acoes?: AcaoSugerida[];
   /** Melhor score encontrado na busca — guardado para calibrar o limiar. */
   melhorScore: number;
   uso: Uso;
