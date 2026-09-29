@@ -41,12 +41,12 @@ Comandos de qualidade:
 | `npm test` | 336 testes unitários, offline | zero |
 | `npm run typecheck` | checagem de tipos | zero |
 | `npm run calibrar -- <slug>` | mede scores de busca para ajustar o limiar | ~US$ 0,000005 |
-| `npm run avaliar -- <slug>` | 24 perguntas contra a API real, gera logs | ~US$ 0,01 |
+| `npm run avaliar -- <slug>` | 28 perguntas contra a API real, gera logs | ~US$ 0,01 |
 | `npm run avaliar -- <slug> --repeticoes 5` | roda 5x e mede estabilidade | ~US$ 0,05 |
 | `npm run relatorio` | histórico de todas as avaliações | zero |
 | `npm run relatorio -- <id>` | trajetória de uma pergunta | zero |
 | `npm run relatorio -- --instaveis` | perguntas que oscilam | zero |
-| `npm run web -- <slug>` | conversa em `/`, bateria de testes em `/testes` e painel em `/painel` | por mensagem |
+| `npm run web -- <slug>` | conversa em `/`, agenda em `/agenda`, testes em `/testes`, painel em `/painel` | por mensagem |
 
 ---
 
@@ -674,11 +674,13 @@ handoff**, olhando a tabela. O painel ganhou a fila de handoffs pendentes, com
 | botão | não existia | destrava, e o handoff segue pendente |
 | `tem onde parar o carro?` (0,329) | handoff | *"Sim, temos estacionamento próprio e gratuito, com seis vagas."* |
 
-### O que NÃO foi resolvido
-`"ta entao marca dia 16 mesmo"` continua virando handoff. O chunk certo é
-enviado (0,376, "Como agendar"), o modelo vê e recusa assim mesmo — porque é um
-pedido para **agendar**, e o bot ainda não sabe agendar. Isso é a fase do bot na
-agenda, não um bug desta.
+### O que NÃO foi resolvido aqui (e foi resolvido depois)
+`"ta entao marca dia 16 mesmo"` continuou virando handoff. O chunk certo era
+enviado (0,376, "Como agendar") e o modelo recusava assim mesmo — porque é
+pedido para **agendar**, e naquele momento o bot não sabia agendar.
+
+**Resolvido na seção "O bot opera a agenda", logo abaixo:** com as ferramentas,
+ele marca de verdade em vez de escalar.
 
 ---
 
@@ -776,9 +778,12 @@ Confirmado com o usuário, não fazer:
 
 ## Pendências e avisos
 
-- **Git inicializado** em 2026-09-23, branch `main`, commit `55c9005` com as
-  Etapas 1 e 2 (53 arquivos). Conferido: `.env` **não** está versionado.
-  `.gitattributes` normaliza as quebras de linha (LF no repositório).
+- **Branch `conversa-natural`** tem todo o trabalho de 2026-09-25 a 09-29 e está
+  à frente de `main`. Para integrar: `git checkout main && git merge conversa-natural`
+  (fast-forward). Conferido: `.env` **não** está versionado, e `.gitattributes`
+  normaliza as quebras de linha (LF no repositório).
+- **O `CLAUDE.md` e a skill `encerrar-sessao` ficam um nível acima**, fora da raiz
+  do git, então não são versionados com o projeto.
 - **A chave da OpenAI foi colada uma vez no `.env.example`** (arquivo versionado).
   Foi movida para `.env` e o placeholder restaurado **antes** de existir git, e
   o commit inicial não contém a chave. Ainda assim, rotacionar a chave é o
