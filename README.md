@@ -172,6 +172,11 @@ Estão em `src/core/llm/prompts.ts` e valem para todo tenant:
 4. No máximo 3 linhas, cortadas no código se o modelo passar.
 5. Uma mensagem por resposta.
 6. Se faltam vários dados, pergunta tudo de uma vez.
+7. **Marca, remarca e cancela consultas** pelas ferramentas de agenda. Nunca
+   afirma disponibilidade sem consultar a agenda de verdade, e confirma com o
+   cliente antes de cancelar ou remarcar — isso está na assinatura da
+   ferramenta (`confirmado: boolean`), não só no prompt.
+8. Não tenta vender nem processar pagamento.
 
 Não são regras estéticas: no WhatsApp cada mensagem enviada tem custo, então
 verbosidade vira prejuízo.
@@ -298,7 +303,7 @@ conversa com janela de contexto, handoff persistido, contabilidade de custo por
 mensagem, adaptador web com painel e bateria de testes, suíte de avaliação com
 logs e medição de estabilidade.
 
-308 testes unitários offline. Última medição: **100% de acurácia e 100% de
+336 testes unitários offline. Última medição: **100% de acurácia e 100% de
 estabilidade** em 5 rodadas consecutivas.
 
 **Próximo passo natural:** trocar os documentos da clínica fictícia pelos de um

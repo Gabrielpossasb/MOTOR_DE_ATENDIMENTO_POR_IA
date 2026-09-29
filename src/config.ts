@@ -131,6 +131,27 @@ export const config = {
     custoEstimadoPorPerguntaUsd: 0.0005,
   },
 
+  /** Agenda: o que o bot pode fazer nela. */
+  agenda: {
+    /**
+     * Oferecer as ferramentas em toda mensagem.
+     *
+     * As definicoes entram no input sempre (~400 tokens). Comeca ligado e
+     * MEDE-SE; filtrar por intencao antes de ter o numero seria otimizar no
+     * escuro, e um filtro por palavra-chave erraria justamente nos pedidos
+     * tortos, que sao a maioria.
+     */
+    ferramentasSempre: true,
+    /**
+     * Teto de idas e voltas com ferramenta numa mesma mensagem.
+     *
+     * Sem teto, um modelo confuso repete a chamada e queima credito em
+     * silencio. Tres cobre o caso normal: consultar horarios, criar, e
+     * responder.
+     */
+    maximoDeVoltas: 3,
+  },
+
   /** Estado e janela de contexto da conversa. */
   conversa: {
     /**

@@ -29,7 +29,7 @@ export function regrasDoBot(): string {
     `5. No máximo ${config.resposta.maximoDeLinhas} linhas. Seja direto.`,
     '6. Envie uma única mensagem. Nunca escreva várias mensagens seguidas.',
     '7. Se faltam vários dados para atender a pessoa, pergunte todos de uma vez, numa frase só.',
-    '8. Não tente vender, agendar nem processar pagamento. Você só informa.',
+    '8. Não tente vender nem processar pagamento.',
     '9. Escreva em português do Brasil, em tom de conversa de WhatsApp.',
   ].join('\n');
 }
@@ -41,8 +41,41 @@ export function regrasDoBot(): string {
  * é uma coisa que alguém disse: é contexto sobre a conversa. Fingir que o
  * cliente ou o bot escreveu aquilo ensinaria o modelo a escrever resumos.
  */
-export function montarPromptDoSistema(promptDoTenant: string, resumo?: string): string {
+/**
+ * Instruções de agenda, acrescentadas quando o bot tem as ferramentas.
+ *
+ * A regra 8 dizia "não tente agendar". Mudou por decisão de produto: a clínica
+ * não quer passar telefone, quer que o bot marque.
+ */
+export function regrasDaAgenda(hoje: string): string {
+  return [
+    'AGENDA:',
+    hoje,
+    'Você CONSEGUE marcar, remarcar e cancelar consultas, usando as ferramentas.',
+    '',
+    'A1. NUNCA diga que um horário está livre sem ter chamado ' +
+      '`consultar_horarios_livres`. Disponibilidade inventada vira paciente na porta ' +
+      'de uma agenda cheia.',
+    'A2. Para marcar você precisa do horário escolhido e do NOME COMPLETO. Telefone e ' +
+      'convênio, se a pessoa tiver. Peça o que faltar de uma vez só.',
+    'A3. Antes de alterar ou cancelar, chame a ferramenta com `confirmado: false`, ' +
+      'repita para o cliente o que vai acontecer e só chame com `confirmado: true` ' +
+      'depois do sim dele.',
+    'A4. Use `meus_agendamentos` para achar o id. Nunca peça o id ao cliente e nunca ' +
+      'invente um.',
+    'A5. Se a ferramenta recusar, explique o motivo em português simples e ofereça ' +
+      'outra saída — outro horário, outro dia.',
+  ].join('\n');
+}
+
+export function montarPromptDoSistema(
+  promptDoTenant: string,
+  resumo?: string,
+  agenda?: string,
+): string {
   const partes = [promptDoTenant.trim(), regrasDoBot()];
+
+  if (agenda) partes.push(agenda);
 
   if (resumo && resumo.trim().length > 0) {
     partes.push(

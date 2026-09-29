@@ -38,7 +38,7 @@ Comandos de qualidade:
 | Comando | O que faz | Custo |
 |---|---|---|
 | `npm run novo-tenant -- <slug> "<Nome>"` | cria a pasta de um cliente novo com modelos | zero |
-| `npm test` | 308 testes unitários, offline | zero |
+| `npm test` | 336 testes unitários, offline | zero |
 | `npm run typecheck` | checagem de tipos | zero |
 | `npm run calibrar -- <slug>` | mede scores de busca para ajustar o limiar | ~US$ 0,000005 |
 | `npm run avaliar -- <slug>` | 24 perguntas contra a API real, gera logs | ~US$ 0,01 |
@@ -123,7 +123,7 @@ Estado de conversa, handoff persistido, contabilidade e política de testes.
 **Dois tipos, separados de propósito.** Juntos os dois pioram: o determinístico
 fica lento e caro, o não-determinístico some no ruído.
 
-**`npm test`** — 308 testes unitários, offline, grátis, ~3s. Rode a cada
+**`npm test`** — 336 testes unitários, offline, grátis, ~3s. Rode a cada
 salvamento. Embedder e LLM são sempre dublês; **nenhum teste unitário toca a
 rede**. Um teste só entra se falha por *um* motivo nomeável, se o nome descreve
 comportamento (não implementação), e — quando nasce de bug real — traz comentário
@@ -682,6 +682,86 @@ agenda, não um bug desta.
 
 ---
 
+## O bot opera a agenda (2026-09-29)
+
+Fase 2 de 3 da agenda. A clínica não quer passar telefone: quer que o bot marque.
+
+Isto **reverte** o "o bot tentar vender, agendar ou processar pagamento" que
+estava em Fora de Escopo, e a regra 8 do prompt, que proibia. Decisão de
+produto, não descuido.
+
+### Tool calling, agnóstico de provedor
+`LlmClient.responder()` devolvia só texto. Agora aceita `ferramentas` e
+`turnosDeFerramenta`, e devolve `ferramentas` quando o modelo quer executar
+algo. A interface fala `Ferramenta`/`ChamadaDeFerramenta`; quem traduz para
+`tools`/`tool_calls` é só a implementação da OpenAI.
+
+JSON de argumento quebrado **descarta a chamada** em vez de derrubar a resposta:
+o modelo tem a volta seguinte para tentar de novo.
+
+### O laço tem teto
+Três voltas. Sem teto, um modelo confuso repete a chamada e queima crédito em
+silêncio, com o cliente esperando uma resposta que não vem. Os tokens de todas
+as voltas são somados — custo que conta só a última chamada é ficção.
+
+### Segurança que não depende do prompt
+1. **`tenantId` e `contatoId` vêm do servidor**, nunca dos argumentos. Nenhuma
+   ferramenta tem parâmetro de contato — há teste conferindo isso nos
+   `properties` de todas elas. Um modelo que alucina um id não alcança a agenda
+   de ninguém.
+2. **Cancelar e alterar exigem `confirmado: true`.** Com `false`, devolve o que
+   aconteceria e não escreve. Campo ausente vale como não confirmado. Está na
+   assinatura da função, não no prompt: prompt pode ser desobedecido.
+3. **`semPersistir` opera em modo seco.** `npm run avaliar` e `/testes` rodam
+   com essa flag; sem isso, avaliar criaria agendamentos de verdade. Duas
+   camadas: o executor tem o modo seco testado, e o motor nem oferece
+   ferramenta quando não há conversa.
+
+### A data de hoje vai no prompt
+Sem ela o modelo não transforma "próxima segunda" em data — chuta, e marca no
+dia errado com toda a confiança.
+
+### Medido contra a API real
+
+Conversa completa, sem nenhuma intervenção:
+
+> — bom dia! queria marcar uma consulta
+> — *"Bom dia! Hoje não tenho horário livre. Me diga outro dia que eu verifico."*
+> — pode ser na proxima segunda de manha
+> — *"Na próxima segunda (05/10) de manhã tenho 08:00, 09:00, 10:00 e 11:00.
+>    Me manda seu nome completo e o horário que prefere."*
+> — as 9 ta bom. meu nome e Maria Silva Santos, telefone 67 99912-3344
+> — *"Perfeito, Maria Silva Santos! Sua consulta ficou marcada para 05/10 às 09:00."*
+
+Conferido no banco: `2026-10-05 09:00 | Maria Silva Santos | tel:67 99912-3344`.
+Depois, `"na verdade preciso cancelar"` → o bot **pediu confirmação e não
+cancelou**; só com o `"isso, pode cancelar"` o status virou `cancelled`.
+
+### O custo subiu, e é preciso saber quanto
+
+| | antes | depois |
+|---|---|---|
+| pergunta simples | US$ 0,00046 | **US$ 0,00107** |
+| tokens de entrada | ~500 | ~1.200 |
+| conversa de agendamento | não existia | ~US$ 0,0027 por mensagem |
+
+As definições das ferramentas mais as regras de agenda somam ~700 tokens em
+**toda** mensagem, inclusive nas que não têm nada com agenda — e a maioria não
+tem. Um agendamento custa mais ainda, porque cada volta de ferramenta é uma
+chamada inteira.
+
+Ficou ligado em todas (`config.agenda.ferramentasSempre`). Um filtro por
+palavra-chave economizaria isso, mas erraria justamente nos pedidos tortos — e
+pedido torto derrubando o bot já foi a causa dos três bugs desta fase. Em
+números absolutos: mil mensagens por mês saem de US$ 0,46 para US$ 1,07.
+
+### Lacuna conhecida
+A suíte de avaliação **não cobre agenda**: como o motor não oferece ferramenta
+sem conversa, uma pergunta de agendamento no `avaliacao.json` mediria o bot sem
+as ferramentas. Testar fluxo de agenda é, por ora, conversar na página.
+
+---
+
 ## Fora de escopo nesta fase
 
 Confirmado com o usuário, não fazer:
@@ -689,7 +769,8 @@ Confirmado com o usuário, não fazer:
 - Supabase ou qualquer serviço em nuvem
 - Autenticação, painel administrativo completo, área de login
 - LangChain — o RAG é explícito de propósito
-- O bot tentar vender, agendar ou processar pagamento
+- O bot tentar vender ou processar pagamento (agendar SAIU daqui: virou recurso,
+  ver a seção "O bot opera a agenda")
 
 ---
 

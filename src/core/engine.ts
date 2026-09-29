@@ -10,10 +10,19 @@ import { config } from '../config.js';
 import type { Db } from '../storage/db.js';
 import type { LlmClient } from './llm/client.js';
 import { custoDaResposta } from './llm/client.js';
+import type { RespostaDoLlm, TurnoDeFerramenta } from './llm/client.js';
+import { AGENDA_PADRAO } from './agenda/disponibilidade.js';
+import {
+  executarFerramenta,
+  FERRAMENTAS_DA_AGENDA,
+  hojeParaOPrompt,
+  type ContextoDasFerramentas,
+} from './agenda/ferramentas.js';
 import {
   montarMensagemComContexto,
   montarPromptDoSistema,
   montarPromptSocial,
+  regrasDaAgenda,
 } from './llm/prompts.js';
 import { normalizar } from './texto.js';
 import { classificarTurnoSocial } from './conversation/turno-social.js';
@@ -261,11 +270,28 @@ export class Motor {
       ? montarContextoDaConversa(this.db, conversa.id)
       : { historico: [] as TurnoDaConversa[] };
 
-    const resposta = await this.llm.responder(
-      montarPromptDoSistema(tenant.promptDoSistema, contexto.resumo),
-      montarMensagemComContexto(textoDaPergunta, relevantes, incerto),
-      contexto.historico,
-    );
+    const agenda = tenant.config.agenda ?? AGENDA_PADRAO;
+    const comFerramentas = config.agenda.ferramentasSempre && conversa !== undefined;
+
+    const resposta = await this.conversarComFerramentas({
+      promptDoSistema: montarPromptDoSistema(
+        tenant.promptDoSistema,
+        contexto.resumo,
+        comFerramentas ? regrasDaAgenda(hojeParaOPrompt()) : undefined,
+      ),
+      mensagem: montarMensagemComContexto(textoDaPergunta, relevantes, incerto),
+      historico: contexto.historico,
+      ferramentas: comFerramentas
+        ? {
+            db: this.db,
+            tenantId: tenant.id,
+            contatoId,
+            agenda,
+            semPersistir: !persistir,
+            ...(conversa ? { conversaId: conversa.id } : {}),
+          }
+        : undefined,
+    });
 
     const texto = limitarLinhas(resposta.texto, config.resposta.maximoDeLinhas);
     // O modelo pode concluir, lendo o contexto, que não tem a informação.
@@ -321,6 +347,58 @@ export class Motor {
       ...(conversa ? { conversaId: conversa.id } : {}),
       aguardandoHumano: false,
     };
+  }
+
+  /**
+   * Conversa com o modelo, executando as ferramentas que ele pedir.
+   *
+   * O laço tem TETO. Sem ele, um modelo confuso repete a mesma chamada e
+   * queima crédito em silêncio — e o cliente fica esperando uma resposta que
+   * não vem. Estourado o teto, devolve o que houver: melhor uma resposta
+   * imperfeita que um laço infinito pago por chamada.
+   *
+   * Os tokens de TODAS as voltas são somados. Custo reportado que conta só a
+   * última chamada é ficção.
+   */
+  private async conversarComFerramentas(p: {
+    promptDoSistema: string;
+    mensagem: string;
+    historico: TurnoDaConversa[];
+    ferramentas?: ContextoDasFerramentas;
+  }): Promise<RespostaDoLlm> {
+    const opcoes = p.ferramentas ? { ferramentas: FERRAMENTAS_DA_AGENDA } : {};
+
+    let resposta = await this.llm.responder(p.promptDoSistema, p.mensagem, p.historico, opcoes);
+    let tokensEntrada = resposta.tokensEntrada;
+    let tokensSaida = resposta.tokensSaida;
+
+    const turnos: TurnoDeFerramenta[] = [];
+    let volta = 0;
+
+    while (
+      p.ferramentas &&
+      resposta.ferramentas &&
+      resposta.ferramentas.length > 0 &&
+      volta < config.agenda.maximoDeVoltas
+    ) {
+      for (const chamada of resposta.ferramentas) {
+        turnos.push({
+          chamada,
+          resultado: executarFerramenta(p.ferramentas, chamada.nome, chamada.argumentos),
+        });
+      }
+
+      resposta = await this.llm.responder(p.promptDoSistema, p.mensagem, p.historico, {
+        ferramentas: FERRAMENTAS_DA_AGENDA,
+        turnosDeFerramenta: turnos,
+      });
+
+      tokensEntrada += resposta.tokensEntrada;
+      tokensSaida += resposta.tokensSaida;
+      volta += 1;
+    }
+
+    return { texto: resposta.texto, tokensEntrada, tokensSaida };
   }
 
   /**
