@@ -3,113 +3,111 @@
 Arquivo de handoff entre sessões. O `PROGRESSO.md` conta o que o projeto **é**;
 este conta o que está **em andamento agora**.
 
-**Última sessão:** 2026-09-26
-**Estado:** suíte **verde** — 267 passando, typecheck limpo.
-**Próximo:** implementar o sistema de agendamento (plano aprovado, ver abaixo).
+**Última sessão:** 2026-09-29
+**Estado:** suíte **verde** — 336 testes, typecheck limpo, árvore limpa.
+**Branch:** `conversa-natural` (4 commits à frente de `main`).
+**Próximo:** Fase C — lembretes.
 
 ---
 
-## Em andamento: sistema de agendamento
+## Próximo passo: Fase C, lembretes
 
-Plano aprovado em 2026-09-26, em
-`~/.claude/plans/pode-commitar-e-em-curried-matsumoto.md`.
+Plano aprovado em `~/.claude/plans/pode-commitar-e-em-curried-matsumoto.md`.
+É a menor das três fases. A infraestrutura já existe:
 
-Decisão de produto: **o bot passa a agendar**. Isso reverte o item "o bot tentar
-vender, agendar ou processar pagamento" que estava em "Fora de escopo" — e a
-regra 7 do prompt, que proíbe explicitamente. Os dois precisam ser reescritos
-junto com a implementação.
+- Tabela `outbox` já criada na migration `003`, com índice único
+  `(appointment_id, kind)` — é ele que garante a idempotência, na mesma
+  disciplina do `ingest`: rodar duas vezes no mesmo dia não duplica.
+- Cancelar um agendamento **já apaga** o lembrete pendente, na mesma transação
+  (feito na Fase 1, com teste).
 
-Motivo: conversando na página, `"quero marcar pra proxima sexta, tem vaga?"`
-recebeu *"Não tenho essa informação aqui"*. A clínica não quer passar telefone,
-quer que o bot marque.
+Falta:
+1. `src/core/agenda/lembretes.ts` — gerar, para cada consulta do dia sem
+   lembrete, uma linha no outbox com o texto da mensagem.
+2. `npm run lembretes -- <slug>` — gera e lista; `--enviar` marca `sent_at`,
+   simulando o canal.
+3. Painel: seção de lembretes pendentes.
+4. Testes: idempotência, só do dia, não gera para cancelado, `--enviar` marca.
 
-Decisões já tomadas com o usuário:
-- Agenda **estruturada**, um recurso por vez (uma cadeira/um profissional)
-- Lembrete por **outbox + comando** (`npm run lembretes`), porque nesta fase não
-  existe WhatsApp
-- O bot **confirma antes** de cancelar ou alterar
-- Página `/agenda` no painel, além do bot
+Nesta fase não existe WhatsApp: o outbox é o ponto de encaixe do adaptador
+real, e o núcleo não vai mudar quando ele chegar.
 
-### Fases (nesta ordem)
-1. **Agenda no núcleo e no painel, sem bot.** Migration `003`, disponibilidade,
-   operações com resultado tipado, página `/agenda`. Entrega sozinha.
-2. **O bot operando.** Tool calling em `LlmClient` — é a maior adição e a de
-   maior risco, por isso vem depois do núcleo estar provado.
-3. **Lembretes.** Tabela `outbox`, comando, idempotência por índice único.
-
-O detalhe completo (schema, assinaturas, armadilhas) está no arquivo do plano.
-
-### Armadilhas já identificadas, anotadas para não esquecer
-- **Dupla marcação** tem de ser barrada por índice único parcial, não por
-  checagem em código: entre o SELECT e o INSERT existe corrida.
-- **`semPersistir` precisa valer para as ferramentas.** `npm run avaliar` e a
-  página `/testes` rodam com essa flag; sem tratá-la, avaliar criaria
-  agendamentos de verdade no banco.
-- **`contatoId` e `tenantId` são injetados pelo servidor**, nunca lidos dos
-  argumentos que o modelo produziu — senão um cliente alcança a agenda de outro.
-- **Confirmação no contrato da ferramenta** (`confirmado: boolean`), não só no
-  prompt. Prompt pode ser desobedecido; assinatura de função, não.
-- **Cancelar apaga o lembrete pendente** na mesma transação.
-- As **ferramentas entram no input de toda mensagem** (~400 tokens, ~US$ 0,0003
-  contra os ~US$ 0,00046 de hoje). Começar sempre ligadas e **medir** antes de
-  otimizar.
+**Verificar de verdade:** criar agendamento para hoje, rodar o comando,
+conferir o texto; rodar de novo e conferir que **não** duplica; cancelar e
+conferir que o lembrete pendente sumiu.
 
 ---
 
-## Bug conhecido e NÃO corrigido: mensagem parcialmente respondível
+## O que saiu nesta sessão (4 commits, tudo em `conversa-natural`)
 
-Pode ser resolvido junto com a Fase 2, porque mexe nos mesmos prompts.
+| commit | o que |
+|---|---|
+| `24999e8` | Bateria de testes `/testes`, turno social, nova conversa, memória compactada |
+| `89c1db8` | Agenda no núcleo e página `/agenda` (fase 1) |
+| `f3283b5` | A conversa não trava: saudação com typo e volta do handoff por botão |
+| `2dd5b87` | O bot opera a agenda: marca, remarca e cancela (fase 2) |
 
-`"quero marcar pra proxima sexta, tem vaga?"` tirou **0,418**, passou do limiar,
-chegou ao LLM — e virou handoff com *"Não tenho essa informação aqui"*. Só que o
-`faq.md` TEM a seção "Como agendar".
+O detalhe de cada um, com o porquê das decisões, está no `PROGRESSO.md`.
 
-Medido, e o resultado é contraintuitivo:
-
-| consulta | score | desfecho |
-|---|---|---|
-| `como faço para agendar?` | 0,672 | responde certo |
-| `quero marcar uma consulta` | 0,435 | responde certo |
-| `quero marcar pra sexta` | **0,402** | responde certo |
-| `quero marcar pra proxima sexta, tem vaga?` | **0,418** | **HANDOFF** |
-
-A que falha tem score MAIOR que uma que funciona. Não é recuperação: é o
-`"tem vaga?"`. A mensagem tem duas partes — *como agendar* (está nos documentos)
-e *se há vaga* (não está). A regra 2 do prompt é tudo-ou-nada, então o modelo
-descarta a mensagem inteira, inclusive a metade que sabia responder.
-
-Mensagem de cliente real quase sempre mistura o que o documento cobre com o que
-ele não cobre.
-
-**Correção proposta:** responder a parte coberta e escalar só o resto. Dois
-efeitos colaterais a tratar junto: (1) `engine.ts` zera as fontes quando há
-handoff, e numa resposta parcial elas precisam ser citadas; (2) a frase de
-handoff é uma só para todos os motivos — "não tenho essa informação" está errado
-quando o motivo é "isso quem faz é uma pessoa".
+### Mudanças de comportamento que valem lembrar
+- **O limiar não barra mais ninguém.** Só escolhe se o contexto vai firme ou
+  marcado como fraco, e alimenta o `melhorScore`. Quem julga é o modelo.
+- **Handoff não é mais porta sem maçaneta.** Toda resposta muda oferece a ação
+  `voltar_ao_bot`; o botão devolve a conversa para `open` e o handoff
+  **continua pendente** para a equipe revisar.
+- **Taxa de resolução** conta conversas que tiveram ALGUM handoff, e não o
+  status atual — senão a volta do bot faria a conversa contar como resolvida.
+- **`handoffs.resolved_at`** (migration `004`) separa "humano precisa olhar" de
+  "bot está mudo".
+- **O bot agenda.** Isso reverteu um item de Fora de Escopo, por decisão de
+  produto.
 
 ---
 
-## Outras pendências
+## Pendências, em ordem
 
-1. **Medir a memória compactada com API real.** Só tem teste offline. Roteiro:
-   8+ turnos, e no último perguntar sobre algo do começo. Conferir que o bot
-   lembra o assunto **e** re-consulta o preço nos documentos.
-2. **`npm run avaliar -- clinica-sorriso --repeticoes 5`** (~US$ 0,06) e comparar
-   com os 100%/100% da Etapa 4. Nenhuma das frentes desta sessão foi medida
-   contra a suíte inteira.
+1. **Fase C** (acima).
+2. **Custo das ferramentas.** Pergunta simples foi de US$ 0,00046 para
+   US$ 0,00107, porque as definições entram em toda mensagem (~700 tokens).
+   Ficou ligado em todas de propósito — filtro por palavra-chave erraria nos
+   pedidos tortos, que causaram os três bugs desta fase. Reavaliar com uso
+   real; a chave é `config.agenda.ferramentasSempre`.
+3. **A avaliação não cobre agenda.** Sem conversa o motor não oferece
+   ferramenta, então pergunta de agendamento no `avaliacao.json` mediria o bot
+   sem as ferramentas. Testar fluxo de agenda é conversar na página.
+4. **Memória compactada não foi medida com API real.** Só teste offline.
+   Roteiro: 8+ turnos e, no último, perguntar sobre algo do começo. Conferir
+   que o bot lembra o assunto **e** re-consulta o preço nos documentos.
+5. **`npm run avaliar -- clinica-sorriso --repeticoes 5`** (~US$ 0,06) contra os
+   100%/100% da Etapa 4. Nenhuma frente desta sessão foi medida contra a suíte
+   inteira, e muita coisa mudou no prompt.
+6. **Mesclar em `main`** quando quiser: `git checkout main && git merge conversa-natural`
+   (fast-forward).
+
+---
+
+## Bug conhecido e NÃO corrigido: resposta parcial
+
+`"quero marcar pra proxima sexta, tem vaga?"` tirou 0,418 e virou handoff com
+*"Não tenho essa informação aqui"*, mesmo com o `faq.md` tendo "Como agendar".
+A mensagem tem duas partes — uma que o documento responde e outra que não — e a
+regra do prompt era tudo-ou-nada, descartando a mensagem inteira.
+
+Parte disso melhorou nesta sessão (a regra 2 virou duas, e contexto fraco agora
+é enviado), mas o caso de mistura continua. Dois efeitos a tratar junto:
+`engine.ts` zera as fontes quando há handoff, e a frase de handoff é uma só
+para todos os motivos — "não tenho essa informação" está errado quando o motivo
+é "isso quem faz é uma pessoa".
 
 ## Aberto, mas não é bug
 
 - Mensagem vaga (`"preciso de ajuda"`, `"?"`) cai em handoff. Não medido.
 - Meta-pergunta (`"você é um robô?"`) cai em handoff. Decisão de produto.
-- O banco local tem 3 conversas legítimas em handoff (`pizza`, `botox`).
+- Agenda com vários profissionais em paralelo ficou fora: hoje é um recurso só.
 
-## O padrão dos bugs desta sessão
+## O padrão dos bugs desta fase
 
-Nenhum foi "o modelo não entendeu". Em dois o modelo nunca teve a chance (foi
-barrado antes pelo limiar); no terceiro entendeu e foi obrigado a descartar por
-uma regra tudo-ou-nada. **Melhorar entendimento aqui é classificar e rotear.**
-
-E os três apareceram **conversando na página**, não pela suíte. A página
-`/testes` é onde cada um vira caso permanente, e a lista de `unanswered` do
-painel é a fila de mensagens que o bot não soube tratar.
+Nenhum foi "o modelo não entendeu". Em todos, ou o modelo nunca teve a chance
+(barrado pelo limiar), ou foi obrigado a descartar (regra tudo-ou-nada). E os
+três apareceram **conversando na página**, não pela suíte. A página `/testes` é
+onde cada um vira caso permanente.
