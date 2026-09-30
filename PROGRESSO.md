@@ -40,7 +40,7 @@ Comandos de qualidade:
 | Comando | O que faz | Custo |
 |---|---|---|
 | `npm run novo-tenant -- <slug> "<Nome>"` | cria a pasta de um cliente novo com modelos | zero |
-| `npm test` | 355 testes unitários, offline | zero |
+| `npm test` | 378 testes unitários, offline | zero |
 | `npm run typecheck` | checagem de tipos | zero |
 | `npm run calibrar -- <slug>` | mede scores de busca para ajustar o limiar | ~US$ 0,000005 |
 | `npm run avaliar -- <slug>` | 28 perguntas contra a API real, gera logs | ~US$ 0,01 |
@@ -49,6 +49,8 @@ Comandos de qualidade:
 | `npm run relatorio -- <id>` | trajetória de uma pergunta | zero |
 | `npm run relatorio -- --instaveis` | perguntas que oscilam | zero |
 | `npm run lembretes -- <slug>` | enfileira os lembretes das consultas de hoje e lista a fila | zero |
+| `npm run conversas -- <slug>` | lista as conversas com o aproveitamento de cada uma | zero |
+| `npm run conversas -- <slug> --id N` | transcrito com os achados; `--md` exporta | zero |
 | `npm run lembretes -- <slug> --enviar` | marca a fila do dia como enviada | zero |
 | `npm run web -- <slug>` | conversa em `/`, agenda em `/agenda`, testes em `/testes`, painel em `/painel` | por mensagem |
 
@@ -127,7 +129,7 @@ Estado de conversa, handoff persistido, contabilidade e política de testes.
 **Dois tipos, separados de propósito.** Juntos os dois pioram: o determinístico
 fica lento e caro, o não-determinístico some no ruído.
 
-**`npm test`** — 355 testes unitários, offline, grátis, ~5s. Rode a cada
+**`npm test`** — 378 testes unitários, offline, grátis, ~5s. Rode a cada
 salvamento. Embedder e LLM são sempre dublês; **nenhum teste unitário toca a
 rede**. Um teste só entra se falha por *um* motivo nomeável, se o nome descreve
 comportamento (não implementação), e — quando nasce de bug real — traz comentário
@@ -880,6 +882,76 @@ negar o que não é.
 **Segunda rodada, depois das duas mudanças: 100% de acurácia e 100% de
 estabilidade, 28/28 em todas as 5 rodadas.** Custo das duas medições somadas:
 US$ 0,146.
+
+---
+
+## Auditoria de conversa: o que a suíte não vê (2026-09-29)
+
+A suíte paga mede **pergunta isolada**, e os defeitos que mais incomodam quem
+conversa só existem ao longo de uma conversa. Ela deu 100% no mesmo dia em que a
+conversa real da página pedia o nome e a data várias vezes.
+
+`npm run conversas -- <slug>` lista as conversas com o aproveitamento de cada
+uma; `--id N` mostra o transcrito com os achados no turno em que aconteceram, e
+`--md` exporta. O mesmo relatório abre no `/painel`, clicando numa conversa —
+aproveitando a rota `/api/conversa`, que existia e nenhuma página usava.
+
+### É um lint, e está escrito que é
+
+A detecção é por padrão de texto, então erra. Cada achado carrega a fala que o
+gerou, para uma pessoa julgar. Um falso positivo custa uma linha para descartar;
+esconder defeito custa cliente.
+
+O **aproveitamento** é contagem, não nota: turnos sem problema grave sobre
+turnos do bot. Nota composta com pesos escolhidos a dedo pareceria precisa e não
+seria — a mesma razão pela qual o custo reportado soma todas as chamadas.
+
+### As regras
+
+| achado | quando | peso |
+|---|---|---|
+| `pedido_repetido` | pediu um dado que a conversa JÁ tinha | grave |
+| `pedido_insistente` | pediu de novo, mas o cliente não tinha respondido | aviso |
+| `afirmou_com_contexto_fraco` | afirmou número com todo score abaixo do limiar | grave |
+| `sem_fonte` | respondeu sem citar fonte, e a mensagem não era social | grave |
+| `handoff` | desistiu | grave |
+
+"A conversa já tinha" inclui o que o **bot** disse: no caso medido ele ofereceu
+"próxima sexta (02/10)" e depois pediu "a data exata" três vezes.
+
+### Metade do código existe contra o falso positivo
+
+E cada trava saiu de um caso real, não de imaginação:
+
+- **Frase de reconhecimento não é pedido.** "Recebi seu telefone, obrigado. Me
+  confirma a data" pede a DATA. Sem separar, viraria "pediu o telefone de novo".
+- **O emoji separa frase.** Achado rodando contra o banco: o bot escreveu "Já
+  recebi, sim 😊 Me confirma seu nome completo", sem ponto no meio. Como frase
+  única, o "recebi" fazia tudo passar por reconhecimento e o defeito escapava —
+  o aproveitamento da conversa 22 subia de 64% para 71% escondendo um erro.
+- **Comentar não é pedir.** "já posso agendar com seu nome e telefone" não pede
+  nada.
+- **Frase curta não é nome.** "ta certo", "ja te mandei" e "nao tenho convenio"
+  têm a forma de nome: só letras, duas palavras.
+- **Hora não é telefone.** "as 9" tem dígito; telefone exige oito.
+- **A resposta do botão de retomada não é resposta a pergunta.** Achado contra o
+  banco real: sem a exceção, toda volta de handoff levava um `sem_fonte`
+  inventado.
+
+### O que ele achou na conversa real
+
+Aproveitamento **64%**, 5 problemas graves: pediu a data três vezes tendo-a dito,
+pediu o nome depois de recebê-lo, e afirmou formas de pagamento (R$ 100,00, 6x)
+com o melhor score em 0,281. Os três primeiros são a mesma raiz — o modelo tem o
+histórico e nada o obriga a consultá-lo antes de pedir de novo.
+
+### Privacidade não é detalhe
+
+`logs/conversas/` entrou no `.gitignore`. O resto de `logs/` é versionado de
+propósito porque avaliação é pergunta sintética; transcrito de conversa tem nome
+e telefone, e com cliente real virar commit é problema de LGPD. A rota
+`/api/conversa` também passou a filtrar por tenant e devolver 404 — sem isso,
+trocar o número na URL lia o atendimento de outra clínica.
 
 ---
 

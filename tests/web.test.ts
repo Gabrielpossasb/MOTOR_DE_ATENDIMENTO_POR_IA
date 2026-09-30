@@ -16,6 +16,8 @@ import { criarServidor } from '../src/adapters/web/rotas.js';
 import type { RespostaDoBot } from '../src/core/types.js';
 import type { PainelDoTenant } from '../src/core/painel/painel-service.js';
 import type { MensagemGravada } from '../src/storage/repositories/messages.js';
+import { obterOuCriarConversa } from '../src/storage/repositories/conversations.js';
+import type { RelatorioDeConversa } from '../src/core/conversation/auditoria.js';
 import type { RegistroDeAvaliacao } from '../src/core/avaliacao/log.js';
 import { EmbedderFake, vetorDeTexto } from './helpers/fake-embedder.js';
 import { LlmQueDesiste } from './helpers/fake-llm.js';
@@ -174,9 +176,37 @@ describe('GET /api/conversa', () => {
     expect(dados.mensagens[0]?.papel).toBe('user');
   });
 
+  it('devolve o relatório de aproveitamento junto', async () => {
+    const primeira = await corpo<RespostaDoBot>(await mandar(PERGUNTA_BOA));
+    const dados = await corpo<{ relatorio: RelatorioDeConversa }>(
+      await fetch(`${base}/api/conversa?id=${primeira.conversaId}`),
+    );
+
+    expect(dados.relatorio.turnos).toBe(1);
+    expect(dados.relatorio.aproveitamento).toBe(1);
+    expect(dados.relatorio.problemas).toEqual([]);
+  });
+
   it('recusa id inválido', async () => {
     expect((await fetch(`${base}/api/conversa?id=abc`)).status).toBe(400);
     expect((await fetch(`${base}/api/conversa`)).status).toBe(400);
+  });
+
+  it('NÃO entrega a conversa de outro cliente', async () => {
+    // Sem o filtro por tenant, trocar o número na URL leria o atendimento de
+    // outra clínica — e o transcrito tem nome e telefone de gente.
+    const outro = salvarTenant(db, {
+      slug: 'outra',
+      nome: 'Outra',
+      config: {},
+      promptDoSistema: 'p',
+    });
+    const conversaAlheia = obterOuCriarConversa(db, outro.id, 'contato-de-fora', 'web');
+
+    const resposta = await fetch(`${base}/api/conversa?id=${conversaAlheia.id}`);
+
+    expect(resposta.status).toBe(404);
+    expect(JSON.stringify(await resposta.json())).not.toContain('contato-de-fora');
   });
 });
 

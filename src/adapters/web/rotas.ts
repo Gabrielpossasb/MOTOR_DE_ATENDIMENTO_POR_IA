@@ -20,6 +20,10 @@ import { montarPainel } from '../../core/painel/painel-service.js';
 import { marcarHandoffRevisado } from '../../storage/repositories/handoffs.js';
 import { ultimasMensagens } from '../../storage/repositories/messages.js';
 import { encerrarConversa } from '../../core/conversation/conversation-service.js';
+import {
+  auditarConversa,
+  type ConversaParaAuditar,
+} from '../../core/conversation/auditoria.js';
 import { carregarTenant, configEfetiva } from '../../core/tenant/tenant-service.js';
 import {
   caminhoDaAvaliacao,
@@ -221,13 +225,32 @@ export async function tratar(
     return;
   }
 
+  // Transcrito + auditoria de uma conversa. É o que o painel abre quando você
+  // clica numa linha: o relatório de aproveitamento vem do núcleo, porque o que
+  // conta como defeito é decisão de negócio e tem teste offline.
   if (req.method === 'GET' && rota === '/api/conversa') {
     const id = Number(url.searchParams.get('id'));
     if (!Number.isInteger(id) || id <= 0) {
       responderJson(res, 400, { erro: 'Informe um id de conversa válido.' });
       return;
     }
-    responderJson(res, 200, { mensagens: ultimasMensagens(ctx.db, id, 200) });
+
+    const tenant = carregarTenant(ctx.db, ctx.slug);
+    const conversa = buscarConversaDoTenant(ctx.db, tenant.id, id);
+
+    // 404 e não 400: o id é válido, a conversa é que não é deste cliente. Sem
+    // este filtro, trocar o número na URL leria a conversa de outro tenant.
+    if (!conversa) {
+      responderJson(res, 404, { erro: 'Conversa não encontrada neste cliente.' });
+      return;
+    }
+
+    const mensagens = ultimasMensagens(ctx.db, id, 200);
+
+    responderJson(res, 200, {
+      mensagens,
+      relatorio: auditarConversa(conversa, mensagens, configEfetiva(tenant).limiarDeConfianca),
+    });
     return;
   }
 
@@ -348,6 +371,23 @@ export function servirArquivo(res: http.ServerResponse, nome: string): void {
 /** Campo de texto do corpo, já aparado. Ausente vira string vazia. */
 function texto(valor: unknown): string {
   return typeof valor === 'string' ? valor.trim() : '';
+}
+
+/** A conversa, só se for deste tenant. O filtro é no SQL, não em quem chama. */
+function buscarConversaDoTenant(
+  db: Db,
+  tenantId: number,
+  id: number,
+): ConversaParaAuditar | undefined {
+  const linha = db
+    .prepare('SELECT id, contact_id, channel, status FROM conversations WHERE id = ? AND tenant_id = ?')
+    .get(id, tenantId) as
+    | { id: number; contact_id: string; channel: string; status: string }
+    | undefined;
+
+  return linha
+    ? { id: linha.id, contatoId: linha.contact_id, canal: linha.channel, status: linha.status }
+    : undefined;
 }
 
 /** A agenda do tenant, ou os padrões para quem ainda não configurou. */

@@ -89,6 +89,16 @@ Os itens 1, 2 e 3 são a mesma raiz: **o modelo tem o histórico, mas não está
 obrigado a usá-lo antes de pedir de novo.** É a próxima frente óbvia de prompt, e
 dá para medir na página.
 
+### Agora isso é detectado sozinho
+
+`npm run conversas -- <slug>` mede o aproveitamento de cada conversa, e o mesmo
+relatório abre no `/painel` clicando numa linha. Detalhe em `PROGRESSO.md`,
+"Auditoria de conversa". A conversa 22 dá **64%**, com os cinco achados acima.
+
+É o número que diz se a próxima mexida no prompt resolveu: hoje 64%, e o alvo é
+não ter `pedido_repetido` nenhum. **Medir antes e depois na mesma conversa não
+custa nada** — a auditoria não chama a API.
+
 ---
 
 ## Pendências, em ordem

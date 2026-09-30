@@ -154,6 +154,89 @@
         color: var(--texto-fraco);
         line-height: 1.6;
       }
+
+      tr.clicavel {
+        cursor: pointer;
+      }
+
+      tr.clicavel:hover td {
+        background: #f7f9fa;
+      }
+
+      .aprov {
+        font-variant-numeric: tabular-nums;
+        font-weight: 600;
+      }
+
+      .aprov.ruim {
+        color: var(--vermelho);
+      }
+
+      /* Transcrito: dialog nativo para o Esc fechar sem uma linha de JS. */
+      dialog {
+        border: 1px solid var(--borda);
+        border-radius: 12px;
+        padding: 0;
+        max-width: 760px;
+        width: calc(100% - 32px);
+        max-height: 82vh;
+      }
+
+      dialog::backdrop {
+        background: rgba(0, 0, 0, 0.35);
+      }
+
+      .cabecalho-dialog {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 12px;
+        padding: 14px 18px;
+        border-bottom: 1px solid var(--borda);
+        position: sticky;
+        top: 0;
+        background: #fff;
+      }
+
+      .corpo-dialog {
+        padding: 16px 18px 22px;
+        overflow-y: auto;
+      }
+
+      .turno {
+        margin-bottom: 14px;
+      }
+
+      .quem {
+        font-size: 11px;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+        color: var(--texto-fraco);
+      }
+
+      .fala {
+        white-space: pre-wrap;
+      }
+
+      .medidas {
+        font-size: 11.5px;
+        color: var(--texto-fraco);
+        margin-top: 2px;
+      }
+
+      .achado {
+        font-size: 12.5px;
+        margin-top: 4px;
+        padding: 5px 9px;
+        border-radius: 6px;
+        border-left: 3px solid var(--amarelo);
+        background: #fffbe9;
+      }
+
+      .achado.grave {
+        border-left-color: var(--vermelho);
+        background: #fdeceb;
+      }
     </style>
   </head>
   <body>
@@ -183,6 +266,9 @@
 
       <h2>Conversas</h2>
       <div id="conversas"></div>
+      <div class="rodape" style="margin-top: 8px">
+        Clique numa conversa para ver o transcrito e o relatório de aproveitamento.
+      </div>
 
       <div class="rodape">
         A <strong>taxa de resolução</strong> conta por conversa, não por mensagem: uma conversa
@@ -193,6 +279,16 @@
         <span id="limiar">…</span>.
       </div>
     </div>
+
+    <dialog id="transcrito">
+      <div class="cabecalho-dialog">
+        <strong id="titulo-dialog">Conversa</strong>
+        <button class="revisar" onclick="document.getElementById('transcrito').close()">
+          Fechar
+        </button>
+      </div>
+      <div class="corpo-dialog" id="corpo-dialog"></div>
+    </dialog>
 
     <script>
       function moeda(valor) {
@@ -330,7 +426,9 @@
               conversas
                 .map(
                   (c) =>
-                    '<tr><td>' +
+                    '<tr class="clicavel" data-conversa="' +
+                    c.id +
+                    '"><td>' +
                     escapar(c.contatoId) +
                     '</td><td>' +
                     escapar(c.canal) +
@@ -348,6 +446,111 @@
                 )
                 .join('') +
               '</tbody></table>';
+
+        for (const linha of document.querySelectorAll('tr.clicavel')) {
+          linha.addEventListener('click', () => abrirConversa(linha.dataset.conversa));
+        }
+      }
+
+      // --- Transcrito e aproveitamento -----------------------------------
+
+      const dialogo = document.getElementById('transcrito');
+
+      async function abrirConversa(id) {
+        document.getElementById('titulo-dialog').textContent = 'Conversa ' + id;
+        document.getElementById('corpo-dialog').innerHTML = 'carregando…';
+        dialogo.showModal();
+
+        try {
+          const resposta = await fetch('/api/conversa?id=' + encodeURIComponent(id));
+          const dados = await resposta.json();
+
+          if (!resposta.ok) {
+            document.getElementById('corpo-dialog').textContent = dados.erro || 'falhou';
+            return;
+          }
+
+          desenharConversa(dados.mensagens, dados.relatorio);
+        } catch (erro) {
+          document.getElementById('corpo-dialog').textContent = 'falha ao carregar: ' + erro.message;
+        }
+      }
+
+      function desenharConversa(mensagens, r) {
+        // Um turno pode ter mais de um achado, então eles são agrupados antes de
+        // desenhar — senão a mesma resposta apareceria repetida.
+        const porTurno = new Map();
+        for (const p of r.problemas) {
+          porTurno.set(p.turno, (porTurno.get(p.turno) || []).concat(p));
+        }
+
+        const ruim = r.aproveitamento < 0.8 ? ' ruim' : '';
+        const partes = [
+          '<div class="cartoes">',
+          cartao(
+            'Aproveitamento',
+            '<span class="aprov' + ruim + '">' + (r.aproveitamento * 100).toFixed(0) + '%</span>',
+            r.turnos - r.turnosComProblemaGrave + ' de ' + r.turnos + ' turnos sem problema grave',
+          ),
+          cartao('Custo', moeda(r.custoUsd), moeda(r.custoMedioPorRespostaUsd) + ' por resposta'),
+          cartao('Latência', r.latenciaMediaMs + 'ms', 'pior caso ' + r.latenciaPiorMs + 'ms'),
+          cartao(
+            'Score médio',
+            r.scoreMedio === null ? '—' : r.scoreMedio.toFixed(3),
+            'limiar em ' + document.getElementById('limiar').textContent,
+          ),
+          '</div>',
+        ];
+
+        let turno = 0;
+        for (const m of mensagens) {
+          if (m.papel !== 'assistant') {
+            partes.push(
+              '<div class="turno"><div class="quem">cliente</div><div class="fala">' +
+                escapar(m.conteudo) +
+                '</div></div>',
+            );
+            continue;
+          }
+
+          turno += 1;
+          const score = m.fontes.length === 0 ? '—' : Math.max(...m.fontes.map((f) => f.score)).toFixed(3);
+
+          partes.push(
+            '<div class="turno"><div class="quem">bot · turno ' +
+              turno +
+              '</div><div class="fala">' +
+              escapar(m.conteudo) +
+              '</div><div class="medidas">score ' +
+              score +
+              ' · ' +
+              moeda(m.custoUsd || 0) +
+              ' · ' +
+              (m.latenciaMs || 0) +
+              'ms</div>' +
+              (porTurno.get(turno) || [])
+                .map(
+                  (p) =>
+                    '<div class="achado' +
+                    (p.grave ? ' grave' : '') +
+                    '"><strong>' +
+                    escapar(p.tipo) +
+                    '</strong> — ' +
+                    escapar(p.detalhe) +
+                    '</div>',
+                )
+                .join('') +
+              '</div>',
+          );
+        }
+
+        partes.push(
+          '<div class="rodape">Os achados vêm de padrão de texto e podem errar: confira a ' +
+            'fala citada antes de tratar como defeito. O aproveitamento conta turnos com ' +
+            'problema <strong>grave</strong>, não a soma dos achados.</div>',
+        );
+
+        document.getElementById('corpo-dialog').innerHTML = partes.join('');
       }
 
       async function atualizar() {

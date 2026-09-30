@@ -16,6 +16,7 @@
     "avaliar": "tsx src/scripts/avaliar.ts",
     "relatorio": "tsx src/scripts/relatorio.ts",
     "lembretes": "tsx src/scripts/lembretes.ts",
+    "conversas": "tsx src/scripts/conversas.ts",
     "web": "tsx src/adapters/web/server.ts"
   },
   "dependencies": {

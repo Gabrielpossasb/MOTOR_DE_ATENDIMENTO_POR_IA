@@ -43,10 +43,28 @@ npm run avaliar -- <slug> --repeticoes 5  # roda 5x e mede estabilidade (~US$ 0,
 npm run relatorio                     # histórico de todas as avaliações
 npm run relatorio -- <id-da-pergunta> # trajetória de uma pergunta
 npm run relatorio -- --instaveis      # perguntas que oscilam entre passar e falhar
+npm run conversas -- <slug>           # lista as conversas com o aproveitamento de cada uma
+npm run conversas -- <slug> --id 22   # transcrito + relatório de uma conversa
+npm run conversas -- <slug> --id 22 --md  # exporta para logs/conversas/
 npm run lembretes -- <slug>           # enfileira os lembretes das consultas de hoje e lista a fila
 npm run lembretes -- <slug> --data 2026-10-05   # de outro dia
 npm run lembretes -- <slug> --enviar  # marca a fila do dia como enviada
 ```
+
+`npm run conversas` também não gasta crédito: lê só o banco. Ele é o par do
+`avaliar` — a suíte mede **pergunta isolada**, e há defeito que só aparece ao
+longo de uma conversa: pedir duas vezes o mesmo dado, afirmar preço com contexto
+vazio, perder o fio. O mesmo relatório aparece no `/painel`, clicando numa
+conversa.
+
+O **aproveitamento** é contagem, não nota: turnos sem problema grave sobre
+turnos do bot, com cada achado citando a fala que o gerou. A detecção é por
+padrão de texto e **pode errar** — por isso o trecho vem junto, para você
+conferir antes de tratar como defeito.
+
+O export de `--md` vai para `logs/conversas/`, que está no `.gitignore`. O resto
+de `logs/` é versionado de propósito, mas aquilo é avaliação sintética; isto é
+conversa de gente, com nome e telefone.
 
 `npm run lembretes` não gasta crédito: não passa nem por modelo nem por
 embedding. Rodar duas vezes no mesmo dia não duplica nada — quem garante é o

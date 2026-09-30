@@ -6,6 +6,14 @@ data/*.db-wal
 dist/
 *.log
 
+# Transcritos de conversa exportados por `npm run conversas -- <slug> --md`.
+#
+# O resto de logs/ é versionado de propósito: avaliação é pergunta sintética e o
+# histórico dela é o que permite calibrar. Isto aqui é o oposto — conversa de
+# gente, com nome e telefone. Com cliente real virar commit é problema de LGPD,
+# não questão de gosto.
+logs/conversas/
+
 # Artefatos de inspeção do navegador
 .playwright-mcp/
 *.png
