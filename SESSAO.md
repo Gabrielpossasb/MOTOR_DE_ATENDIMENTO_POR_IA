@@ -4,10 +4,15 @@ Arquivo de handoff entre sessões. O `PROGRESSO.md` conta o que o projeto **é**
 este conta o que está **em andamento agora**.
 
 **Última sessão:** 2026-09-29
-**Estado:** suíte **verde** — 355 testes, typecheck limpo.
+**Estado:** suíte **verde** — 355 testes offline, typecheck limpo, e a suíte paga
+em **100% de acurácia e 100% de estabilidade** (5 rodadas, 28 perguntas).
 **Branch:** `conversa-natural`, à frente de `main`.
-**Próximo:** a regressão paga (`npm run avaliar --repeticoes 5`) e depois trocar
-os documentos da clínica fictícia pelos de um cliente real.
+**Próximo:** a coleta de dados repetida na conversa (ver a seção da conversa real
+abaixo) e depois trocar os documentos da clínica fictícia pelos de um cliente real.
+
+**No banco há uma consulta de verdade** (`2026-10-02 09:00`, Gabriel, conversa 22),
+feita pela página durante a sessão. Não é resíduo de teste — não apague sem
+perguntar.
 
 ---
 
@@ -45,13 +50,51 @@ O plano que guiou tudo está em
 
 ---
 
+## A regressão paga foi feita: 100%/100%
+
+Detalhe em `PROGRESSO.md`, "A regressão paga, finalmente rodada". Em resumo: caiu
+para 93,6% na primeira medição, duas perguntas falhando; uma era regressão de
+verdade (o bot dava o preço do clareamento de consultório para quem perguntou do
+a laser) e a outra era o teste do `pizza`, que ainda cobrava o limiar-porteiro. As
+duas resolvidas, segunda medição 28/28 nas 5 rodadas. **`semPersistir` confirmado:
+140 chamadas e zero linha escrita na agenda.**
+
+---
+
+## O que a conversa real na página expôs (2026-09-29, 21:46)
+
+Vale mais que a suíte, como sempre nesta fase. O agendamento **funcionou** de
+ponta a ponta (`2026-10-02 09:00`, conversa 22, ainda no banco), mas levou 8
+turnos para coletar o que caberia em 2. Nada disto está corrigido:
+
+1. **O bot esquece a data que ele mesmo acabou de oferecer.** Listou os horários
+   de sexta 02/10, o cliente disse `"as 9"`, e ele respondeu *"preciso da data
+   exata"*. A data estava na mensagem anterior dele.
+2. **Pede duas vezes o que já tem.** Recebeu o telefone e pediu a data de novo;
+   recebeu o nome e pediu *"me confirma seu nome completo"* depois. O `"ja te
+   mandei"` do cliente é o sintoma. A regra 7 existe para isso e não bastou.
+3. **`"como"` virou conversa solta.** O classificador social está inocente —
+   conferido, `"como"` vai para a busca. Foi o modelo: pela regra 2, tratou um
+   follow-up curto como "algo que não consegui entender" e respondeu *"Oi! Como
+   posso te ajudar?"*, perdendo o fio. Mesma família do bug de resposta parcial: a
+   regra 2 é generosa demais com mensagem curta que TEM sentido no histórico.
+4. **`"como funciona"` respondeu formas de pagamento** quando o assunto era
+   remarcação. Deriva de contexto.
+5. **Ofereceu 12:00.** Não é bug: o `tenant.json` da clínica tem uma janela só,
+   08:00–18:00, sem almoço. Mas se algum documento mencionar horário de almoço, os
+   dois se contradizem — é exatamente o risco descrito no README, em "O bloco
+   `agenda` do `tenant.json`".
+
+Os itens 1, 2 e 3 são a mesma raiz: **o modelo tem o histórico, mas não está sendo
+obrigado a usá-lo antes de pedir de novo.** É a próxima frente óbvia de prompt, e
+dá para medir na página.
+
+---
+
 ## Pendências, em ordem
 
-1. **Regressão paga, que nunca foi feita depois de tudo isso.**
-   `npm run avaliar -- clinica-sorriso --repeticoes 5` (~US$ 0,06) contra os
-   100%/100% da Etapa 4. O prompt mudou muito: regra 2 virou duas, entraram as
-   regras de agenda e a data de hoje. **Conferir também que a avaliação não criou
-   agendamento nenhum** — é o teste de fogo do `semPersistir`.
+1. **A coleta de dados repetida (itens 1 a 3 acima).** É o que mais incomoda quem
+   conversa, e é de graça testar na página.
 2. **Custo das ferramentas.** Pergunta simples foi de US$ 0,00046 para
    US$ 0,00107, porque as definições entram em toda mensagem (~700 tokens). Ficou
    ligado em todas de propósito — filtro por palavra-chave erraria nos pedidos

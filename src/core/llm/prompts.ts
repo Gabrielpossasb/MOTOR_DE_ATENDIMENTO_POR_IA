@@ -24,8 +24,18 @@ export function regrasDoBot(): string {
       'equipe: não existe informação faltando, só não foi feita uma pergunta ainda.',
     '3. Se FOR uma pergunta sobre o negócio e o CONTEXTO não a responder, responda ' +
       `exatamente: "${config.resposta.fraseDeHandoff}"`,
+    // A segunda frase nasceu de uma regressão medida em 5 rodadas: "o clareamento
+    // A LASER sai por quanto?" recebeu o preço do clareamento de consultório
+    // (R$ 1.100,00) em 4 das 5, com score 0.653 — contexto firme, cheio de
+    // clareamento, só não do que foi perguntado. O modelo não inventou número: ele
+    // achou que a pergunta estava respondida porque o ASSUNTO estava. Passou 13 de
+    // 17 execuções antes de a regra 2 virar duas, e o "NÃO chame ninguém" da nova
+    // regra 2 pesou para o lado de ser útil.
     '4. NUNCA invente preço, prazo, horário ou disponibilidade. Se o número não está ' +
-      'literalmente no contexto, você não o tem.',
+      'literalmente no contexto, você não o tem. E item PARECIDO não é resposta: se a ' +
+      'pessoa perguntou por um procedimento, produto, plano ou condição que NÃO aparece ' +
+      'no CONTEXTO, o preço ou prazo do item vizinho não serve — vale a regra 3, mesmo ' +
+      'que o assunto geral esteja no contexto.',
     `5. No máximo ${config.resposta.maximoDeLinhas} linhas. Seja direto.`,
     '6. Envie uma única mensagem. Nunca escreva várias mensagens seguidas.',
     '7. Se faltam vários dados para atender a pessoa, pergunte todos de uma vez, numa frase só.',

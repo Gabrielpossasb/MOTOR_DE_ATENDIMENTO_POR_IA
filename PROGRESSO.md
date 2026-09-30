@@ -832,6 +832,57 @@ o comando não rodou. Sem isso, o lembrete não sair passaria em silêncio.
 
 ---
 
+## A regressão paga, finalmente rodada (2026-09-29)
+
+`npm run avaliar -- clinica-sorriso --repeticoes 5`, contra os 100%/100% da
+Etapa 4. Nada tinha sido medido contra a suíte inteira desde que o prompt mudou.
+
+**Primeira rodada: 93,6% de acurácia, 96,4% de estabilidade.** Duas perguntas
+falhando, e só uma era culpa do bot.
+
+### O `semPersistir` passou o teste de fogo
+140 chamadas à API com as ferramentas de agenda oferecidas em todas, e **zero
+linha** escrita em `appointments` e `outbox`. Conferido antes e depois. Era a
+dúvida mais séria da lista: sem isso, avaliar criaria consulta de verdade.
+
+### Regressão real: o bot empurrava o preço do vizinho
+`"o clareamento a laser sai por quanto?"` — a clínica não faz a laser. Em **4 das
+5 rodadas** o bot respondeu *"O clareamento em consultório, em três sessões,
+custa R$ 1.100,00."*
+
+Ele não inventou número nenhum: score 0,653, contexto firme e cheio de
+clareamento. Ele concluiu que a pergunta estava respondida porque o **assunto**
+estava. Essa pergunta passava em 13 de 17 execuções históricas, e o que a virou
+foi a divisão da regra 2 desta mesma sessão: o `"NÃO chame ninguém da equipe"` da
+nova regra 2 vem **antes** da regra que manda escalar, e pesou para o lado de ser
+útil.
+
+Corrigido na regra 4, onde o caso pertence — *item parecido não é resposta* —, sem
+renumerar as outras. Voltou a 5/5, conferido rodando só essa pergunta 5 vezes por
+US$ 0,005 em vez de pagar a suíte inteira para descobrir.
+
+### O outro caso era o teste, não o bot
+`"vocês vendem pizza?"` esperava handoff, e o comentário da pergunta dizia por
+quê: *"deve ser barrado pelo limiar, sem chamar o LLM"*. Esse mecanismo saiu por
+decisão de produto. Chamar um colaborador para dizer que uma clínica
+odontológica não vende pizza é o desperdício que a Fase A atacou, e o bot
+responde *"Não vendemos pizza. Posso te ajudar com algo da clínica?"*.
+
+A expectativa mudou, não o código — e a pergunta continua cobrando algo real:
+negar **sem inventar preço e sem acionar ninguém** (`esperaHandoff: false` mais
+`naoPodeConter`). O `comentario` registra a troca, para ninguém achar depois que
+o teste foi afrouxado só para passar.
+
+Sobrou uma assimetria não resolvida: `"qual a previsão do tempo amanhã?"`
+continua virando handoff, e passando. O bot sabe negar o que não vende e não sabe
+negar o que não é.
+
+**Segunda rodada, depois das duas mudanças: 100% de acurácia e 100% de
+estabilidade, 28/28 em todas as 5 rodadas.** Custo das duas medições somadas:
+US$ 0,146.
+
+---
+
 ## Fora de escopo nesta fase
 
 Confirmado com o usuário, não fazer:

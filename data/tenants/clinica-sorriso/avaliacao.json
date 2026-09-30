@@ -129,8 +129,9 @@
     {
       "id": "pizza",
       "pergunta": "vocês vendem pizza?",
-      "esperaHandoff": true,
-      "comentario": "Fora do domínio: deve ser barrado pelo limiar, sem chamar o LLM."
+      "esperaHandoff": false,
+      "naoPodeConter": ["R$", "vou chamar alguém da equipe"],
+      "comentario": "Esperava handoff porque o limiar barrava antes de chamar o LLM. O limiar deixou de barrar por decisão de produto, e chamar um colaborador para dizer que a clínica não vende pizza é o desperdício que o turno social existe para evitar. O que se cobra agora: negar sem inventar preço e sem acionar ninguém."
     },
     {
       "id": "previsao-tempo",
