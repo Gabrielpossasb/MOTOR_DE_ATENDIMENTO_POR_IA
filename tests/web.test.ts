@@ -555,7 +555,10 @@ describe('agrupamento de mensagens seguidas', () => {
   let agrupador: AgrupadorDeMensagens;
 
   beforeEach(async () => {
-    agrupador = new AgrupadorDeMensagens({ esperaMs: 60, esperaMaximaMs: 400 });
+    // Espera folgada de propósito: sob carga, um setTimeout de 20ms estoura
+    // fácil os 60ms, e o teste virava moeda. O que se mede aqui é o
+    // agrupamento, não a precisão do relógio.
+    agrupador = new AgrupadorDeMensagens({ esperaMs: 300, esperaMaximaMs: 3000 });
     const motor = new Motor({ db, embedder: new EmbedderFake(), llm: new LlmQueDesiste() });
     comAgrupador = criarServidor({ motor, db, slug: SLUG, agrupador });
 
@@ -568,6 +571,26 @@ describe('agrupamento de mensagens seguidas', () => {
     await new Promise<void>((resolve) => comAgrupador.close(() => resolve()));
   });
 
+  const esperar = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+  /**
+   * Três mensagens como gente digita: espaçadas, não simultâneas.
+   *
+   * Disparar as três no mesmo instante fazia o teste oscilar — a ordem de
+   * chegada de requisições HTTP concorrentes não é garantida, e o lote sai na
+   * ordem em que chegou. A limitação é real: quando o adaptador de WhatsApp
+   * entrar, ele vai precisar ordenar pelo timestamp do webhook.
+   */
+  async function tresSeguidas(): Promise<Promise<Response>[]> {
+    const primeira = mandarAgrupada(PERGUNTA_BOA);
+    await esperar(15);
+    const segunda = mandarAgrupada('pra sexta');
+    await esperar(15);
+    const terceira = mandarAgrupada('as 9');
+
+    return [primeira, segunda, terceira];
+  }
+
   function mandarAgrupada(texto: string, contatoId = 'contato-junto'): Promise<Response> {
     return fetch(`${baseAgrupada}/api/mensagem`, {
       method: 'POST',
@@ -579,11 +602,7 @@ describe('agrupamento de mensagens seguidas', () => {
   it('três mensagens seguidas viram UMA resposta', async () => {
     // O caso real: o cliente escreveu o pedido em três mensagens e levou três
     // respostas, uma para cada pedaço.
-    const respostas = await Promise.all([
-      mandarAgrupada(PERGUNTA_BOA),
-      mandarAgrupada('pra sexta'),
-      mandarAgrupada('as 9'),
-    ]);
+    const respostas = await Promise.all(await tresSeguidas());
 
     const corpos = await Promise.all(respostas.map((r) => corpo<Record<string, unknown>>(r)));
     const agrupadas = corpos.filter((c) => c.agrupada === true);
@@ -594,20 +613,14 @@ describe('agrupamento de mensagens seguidas', () => {
   });
 
   it('grava UM par user/assistant, com os três pedaços na linha do cliente', async () => {
-    await Promise.all([
-      mandarAgrupada(PERGUNTA_BOA),
-      mandarAgrupada('pra sexta'),
-      mandarAgrupada('as 9'),
-    ]);
+    await Promise.all(await tresSeguidas());
 
     const conversa = conversaAtiva(db, 1, 'contato-junto');
     const mensagens = mensagensApos(db, conversa?.id ?? 0, 0);
 
     expect(mensagens).toHaveLength(2);
     expect(mensagens[0]?.papel).toBe('user');
-    expect(mensagens[0]?.conteudo).toBe(`${PERGUNTA_BOA}
-pra sexta
-as 9`);
+    expect(mensagens[0]?.conteudo).toBe([PERGUNTA_BOA, 'pra sexta', 'as 9'].join('\n'));
     expect(mensagens[1]?.papel).toBe('assistant');
   });
 

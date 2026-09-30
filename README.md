@@ -380,7 +380,7 @@ avaliação com logs e medição de estabilidade, e a **agenda completa** — a
 recepção opera pela página, o bot marca, remarca e cancela por tool calling, e o
 lembrete do dia sai pelo `outbox`.
 
-403 testes unitários offline. Última medição de acurácia: **100% de acurácia e
+405 testes unitários offline. Última medição de acurácia: **100% de acurácia e
 100% de estabilidade** em 5 rodadas consecutivas — medido antes das mudanças de
 prompt da agenda, então precisa ser refeito.
 

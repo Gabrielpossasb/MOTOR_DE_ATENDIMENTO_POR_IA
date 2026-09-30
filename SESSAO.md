@@ -4,7 +4,7 @@ Arquivo de handoff entre sessões. O `PROGRESSO.md` conta o que o projeto **é**
 este conta o que está **em andamento agora**.
 
 **Última sessão:** 2026-09-30
-**Estado:** suíte **verde** — 403 testes offline, typecheck limpo, e a suíte paga
+**Estado:** suíte **verde** — 405 testes offline, typecheck limpo, e a suíte paga
 em **100% de acurácia e 100% de estabilidade** (5 rodadas, 28 perguntas).
 **Branch:** `conversa-natural`, à frente de `main`.
 **Próximo:** a coleta de dados repetida na conversa (ver a seção da conversa real
@@ -116,17 +116,6 @@ custa nada** — a auditoria não chama a API.
 
 ---
 
-## A CHAVE DA OPENAI ESTÁ INVALIDADA (2026-09-30)
-
-Qualquer chamada paga devolve `401 Your API key has been invalidated`. É a
-chave que o `PROGRESSO.md` já recomendava rotacionar — ela foi colada uma vez
-no `.env.example`, que é versionado.
-
-**Nada roda contra a API real até trocar `OPENAI_API_KEY` no `.env`.** A suíte
-offline (403 testes) não depende disso e continua verde.
-
----
-
 ## Agrupamento de mensagens (2026-09-30)
 
 Mensagens seguidas do mesmo cliente viram um turno só: 2,5s de silêncio, com o
@@ -139,8 +128,28 @@ hora e só a terceira levou o turno ao motor. Na página, o input **continua
 habilitado** (antes travava, e era isso que impedia o recurso) e aparece um
 único "digitando…".
 
-**Falta medir com a API real**, por causa da chave: confirmar que três
-mensagens agrupadas custam cerca de um terço de três separadas.
+**Medido com a API real** (chave nova em 30/09): agrupado US$ 0,002620 numa
+chamada contra US$ 0,004985 em três. **47% mais barato, não os ~67% que eu
+previ** — a mensagem que aciona a ferramenta custa 2,5x uma simples.
+
+O ganho maior não foi o custo: separado, o bot **confirmou um horário ocupado**
+("Perfeito — para agendar às 9h") logo depois de ter listado os livres sem as
+09:00. Agrupado, pegou o conflito. Detalhe em `PROGRESSO.md`.
+
+---
+
+## Pendência nova: a auditoria não pega horário impossível
+
+Na comparação acima, a conversa que **confirmou um horário ocupado** tirou 100%
+de aproveitamento. Nenhuma regra pega isso, e pegaria: bastaria a auditoria
+consultar `horariosLivres` para a data e a hora citadas na resposta.
+
+É outro tipo de checagem — cruza a conversa com a agenda, em vez de olhar só o
+texto — e por isso ficou fora. Mas é o defeito mais caro que já vi o bot
+cometer: o cliente sai achando que tem hora marcada.
+
+(O falso positivo oposto, acusar quem pediu de novo um valor **recusado**, foi
+corrigido: resposta com recusa não gera mais `pedido_repetido`.)
 
 ---
 

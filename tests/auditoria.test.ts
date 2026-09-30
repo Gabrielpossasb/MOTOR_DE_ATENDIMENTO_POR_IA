@@ -229,6 +229,36 @@ describe('o que a auditoria NÃO pode acusar', () => {
     expect(tipos(r)).toEqual(['pedido_repetido', 'pedido_repetido']);
   });
 
+  it('pedir de novo o que foi RECUSADO não é esquecimento', () => {
+    // Medido com a API real: o cliente mandou as três mensagens juntas, o
+    // horário pedido estava ocupado, e o bot respondeu corretamente "às 09:00
+    // não tenho horário livre... me diga qual prefere". O relatório acusou
+    // "pediu o horário, que a conversa já tinha" e deu 0% para a MELHOR das
+    // duas conversas comparadas.
+    const r = auditar([
+      cliente(['quero marcar', 'pra proxima sexta', 'as 9 da manha'].join('\n')),
+      bot(
+        'Às 09:00 não tenho horário livre. Tenho 08:00 e 10:00. Me diga qual horário prefere.',
+        0.482,
+        true,
+      ),
+    ]);
+
+    expect(tipos(r)).toEqual([]);
+    expect(r.aproveitamento).toBe(1);
+  });
+
+  it('mas continua acusando quando NÃO houve recusa', () => {
+    // A trava acima não pode virar desculpa geral: sem recusa na resposta, o
+    // pedido repetido continua sendo defeito.
+    const r = auditar([
+      cliente('quero marcar as 9 da manha'),
+      bot('Certo! Me diga qual horário você prefere.', 0.48, true),
+    ]);
+
+    expect(tipos(r)).toEqual(['pedido_repetido']);
+  });
+
   it('hora não conta como telefone', () => {
     // "as 9" tem dígito. Se contasse como telefone, pedir o telefone depois
     // viraria esquecimento.

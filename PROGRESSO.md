@@ -40,7 +40,7 @@ Comandos de qualidade:
 | Comando | O que faz | Custo |
 |---|---|---|
 | `npm run novo-tenant -- <slug> "<Nome>"` | cria a pasta de um cliente novo com modelos | zero |
-| `npm test` | 403 testes unitários, offline | zero |
+| `npm test` | 405 testes unitários, offline | zero |
 | `npm run typecheck` | checagem de tipos | zero |
 | `npm run calibrar -- <slug>` | mede scores de busca para ajustar o limiar | ~US$ 0,000005 |
 | `npm run avaliar -- <slug>` | 28 perguntas contra a API real, gera logs | ~US$ 0,01 |
@@ -129,7 +129,7 @@ Estado de conversa, handoff persistido, contabilidade e política de testes.
 **Dois tipos, separados de propósito.** Juntos os dois pioram: o determinístico
 fica lento e caro, o não-determinístico some no ruído.
 
-**`npm test`** — 403 testes unitários, offline, grátis, ~5s. Rode a cada
+**`npm test`** — 405 testes unitários, offline, grátis, ~5s. Rode a cada
 salvamento. Embedder e LLM são sempre dublês; **nenhum teste unitário toca a
 rede**. Um teste só entra se falha por *um* motivo nomeável, se o nome descreve
 comportamento (não implementação), e — quando nasce de bug real — traz comentário
@@ -1081,6 +1081,66 @@ da mensagem antes de codar.
 
 Junto: um indicador "digitando…" para a conversa, não um por envio — três envios
 empilhavam três na tela para uma resposta só.
+
+### Medido com a API real
+
+As mesmas três mensagens, agrupadas e separadas, contra a clínica de exemplo:
+
+| | chamadas | custo |
+|---|---|---|
+| agrupado | 1 | US$ 0,002620 |
+| separado | 3 | US$ 0,004985 |
+
+**47% mais barato, e não os ~67% que eu previ.** A previsão errou porque supôs
+custo uniforme por mensagem: a mensagem que aciona a ferramenta de agenda custa
+~2,5x uma simples (2.900 tokens de entrada contra 1.360), então juntar três não
+divide por três.
+
+### O ganho de verdade não foi o custo, foi a resposta
+
+Separado, na terceira mensagem:
+
+> — as 9 da manha
+> — *"Perfeito — para agendar às 9h, me envie seu nome completo e telefone."*
+
+**As 09:00 daquela sexta estavam ocupadas** — o próprio bot tinha acabado de
+listar os livres, sem as 09:00, na resposta anterior. Ele confirmou um horário
+que não existe.
+
+Agrupado, com o mesmo pedido:
+
+> *"Pra sexta 02/10 às 09:00 não tenho horário livre. Tenho 08:00, 10:00, ... Se
+> quiser, me diga qual horário prefere e seu nome completo com telefone."*
+
+Recebendo o pedido inteiro de uma vez, o bot consultou a agenda com a data E a
+hora e pegou o conflito. Fragmentado, ele perdeu o fio entre um turno e outro.
+Era isto que a fragmentação custava, e o custo em dólar é o detalhe.
+
+### A auditoria inverteu o veredito, e isso era bug dela
+
+O relatório deu **0% para a conversa boa** e **100% para a ruim**.
+
+O 0% veio de `pedido_repetido: pediu o horário, que a conversa já tinha`. A
+conversa tinha mesmo — e o bot pediu de novo porque **recusou** aquele horário.
+Pedir de novo o que foi recusado é o certo, não esquecimento. Corrigido: a
+resposta que contém uma recusa não gera esse achado.
+
+O 100% da conversa ruim é a outra metade, e **continua em aberto**: nenhuma
+regra pega "confirmou um horário que não está livre". Pegaria exigindo que a
+auditoria consultasse a agenda na data citada — é outro tipo de checagem, e está
+anotado como pendência.
+
+### Ordenação, uma limitação conhecida
+
+O lote sai na ordem em que as mensagens **chegaram**. Isso apareceu como teste
+oscilante: três requisições HTTP disparadas no mesmo instante chegam em ordem
+arbitrária, e o turno saía embaralhado. Digitação humana não produz isso, e o
+teste passou a espaçar como gente digita.
+
+Mas **webhook do WhatsApp pode chegar fora de ordem**. Quando o adaptador
+entrar, ele precisa ordenar pelo `timestamp` da mensagem antes de juntar — e
+`"quero cancelar / não, deixa"` não é a mesma coisa que `"não, deixa / quero
+cancelar"`.
 
 ### O que NÃO mudou
 

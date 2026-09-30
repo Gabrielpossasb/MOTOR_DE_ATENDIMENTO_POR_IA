@@ -138,6 +138,22 @@ const RECONHECIMENTO = /\b(recebi|anotei|obrigad[oa]|perfeito|j[áa] (recebi|ten
 const PEDIDO =
   /\?|me (manda|mande|envia|envie|confirma|confirme|informa|informe|diz|diga|passa|passe)|preciso d|pode (me )?(mandar|enviar|informar|confirmar|dizer|passar)|falta(m)? |qual|quais|informe|confirme/i;
 
+/**
+ * A resposta RECUSA o que o cliente pediu.
+ *
+ * Quando o bot recusa um valor, pedir o dado de novo é o certo, não um
+ * esquecimento. Medido: o cliente mandou "quero marcar / pra proxima sexta /
+ * as 9 da manha" e o bot respondeu "às 09:00 não tenho horário livre. Tenho
+ * 08:00, 10:00... me diga qual horário prefere" — resposta correta, e o
+ * relatório acusou "pediu o horário, que a conversa já tinha".
+ *
+ * Suprime o achado na resposta inteira, e não só no dado recusado: atribuir a
+ * recusa ao dado certo exigiria entender a frase, e um lint que erra para o
+ * lado de não acusar é melhor que um que inventa defeito.
+ */
+const RECUSA =
+  /n[ãa]o (tenho|temos|h[áa]|atendemos|trabalhamos|consigo)|indispon[íi]vel|j[áa] (est[áa] )?ocupad|sem (hor[áa]rio|vaga)|n[ãa]o (est[áa]|fica) (livre|dispon)/i;
+
 /** Resposta que afirma um dado: preço, quantidade, hora, parcela. */
 const AFIRMA_DADO = /r\$\s*\d|\d{1,2}\s*:\s*\d{2}|\d+\s*x\b|\d{2,}/i;
 
@@ -260,7 +276,7 @@ export function auditarConversa(
       const dado = DADOS.find((d) => d.id === id);
       if (!dado) continue;
 
-      if (jaFornecido.has(id)) {
+      if (jaFornecido.has(id) && !RECUSA.test(mensagem.conteudo)) {
         registrar({
           tipo: 'pedido_repetido',
           grave: true,
