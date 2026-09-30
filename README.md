@@ -21,9 +21,10 @@ npm run cli    -- clinica-sorriso   # conversa no terminal
 npm run web    -- clinica-sorriso   # conversa, bateria de testes e painel no navegador
 ```
 
-O `npm run web` sobe três páginas: `/` (conversa), `/testes` (bateria de testes:
+O `npm run web` sobe quatro páginas: `/` (conversa), `/agenda` (a agenda da
+recepção: marcar, remarcar e cancelar na mão), `/testes` (bateria de testes:
 ver, editar e rodar as perguntas do `avaliacao.json` uma a uma, por grupo ou
-todas) e `/painel` (números).
+todas) e `/painel` (números, handoffs a revisar e lembretes na fila).
 
 Na conversa, **Nova conversa** (ou **Ctrl+Shift+N**) encerra a conversa atual e
 começa outra do zero — para ir testando linguagem natural sem abrir aba nova, e
@@ -42,7 +43,16 @@ npm run avaliar -- <slug> --repeticoes 5  # roda 5x e mede estabilidade (~US$ 0,
 npm run relatorio                     # histórico de todas as avaliações
 npm run relatorio -- <id-da-pergunta> # trajetória de uma pergunta
 npm run relatorio -- --instaveis      # perguntas que oscilam entre passar e falhar
+npm run lembretes -- <slug>           # enfileira os lembretes das consultas de hoje e lista a fila
+npm run lembretes -- <slug> --data 2026-10-05   # de outro dia
+npm run lembretes -- <slug> --enviar  # marca a fila do dia como enviada
 ```
+
+`npm run lembretes` não gasta crédito: não passa nem por modelo nem por
+embedding. Rodar duas vezes no mesmo dia não duplica nada — quem garante é o
+índice único `(appointment_id, kind)` do `outbox`, a mesma disciplina do
+`ingest`. Nesta fase nada sai sozinho: o comando é o dublê do canal, e o dia em
+que a Cloud API entrar ela drena a mesma tabela.
 
 O CLI também aceita entrada redirecionada, o que serve para testar em lote:
 
@@ -94,7 +104,7 @@ sobrescreve** uma pasta existente.
 Depois:
 
 1. Jogue os documentos do cliente (`.txt` e `.md`) na pasta.
-2. Ajuste `promptDoSistema` em `tenant.json`.
+2. Ajuste `promptDoSistema` e o bloco `agenda` em `tenant.json`.
 3. Escreva em `avaliacao.json` as perguntas que os clientes fazem de verdade.
 4. Rode:
 
@@ -107,6 +117,34 @@ npm run avaliar  -- barbearia-do-ze --repeticoes 5 # mede qualidade e estabilida
 
 A ingestão é idempotente: arquivo cujo conteúdo não mudou é pulado, porque
 embedding custa dinheiro. Mexeu num documento? Rode `ingest` de novo.
+
+### O bloco `agenda` do `tenant.json`
+
+É o que o bot usa para calcular horário livre. Fica em dado estruturado, e não
+nos documentos, porque o `.txt` de horários é texto para o RAG ler em voz alta e
+agenda precisa de algo que dê para calcular.
+
+```json
+"agenda": {
+  "duracaoMin": 60,
+  "janelas": {
+    "1": [["08:00", "12:00"], ["13:00", "18:00"]],
+    "6": [["08:00", "12:00"]]
+  },
+  "antecedenciaMinimaHoras": 2,
+  "diasNoFuturo": 60
+}
+```
+
+`janelas` é por dia da semana, com **0 = domingo**; dia ausente é dia fechado, e
+duas janelas cobrem o almoço. A grade sai de `duracaoMin`, e um horário que não
+caberia antes de fechar não é oferecido — consulta de 90min não começa 17:30 num
+expediente que fecha 18:00.
+
+**Os dois precisam concordar com o documento.** Se o `.txt` disser que abre
+sábado e `janelas` não tiver o `"6"`, o bot informa um horário que ele não
+consegue marcar. Quem não configurar nada cai no `AGENDA_PADRAO` (seg-sex,
+8-12 e 13-18, 60min).
 
 ### O que mais afeta a qualidade
 
@@ -125,7 +163,7 @@ internas e o próprio `_LEIA-ME.md` ficam na pasta sem virar resposta do bot.
 |---|---|---|
 | O documento responde | `false` | mede se o bot acha a informação |
 | **Não responde, mas é do ramo** | `true` | **a mais importante** — a busca pontua alto e o bot tem de recusar mesmo assim |
-| Fora do assunto | `true` | deve ser barrado pelo limiar, sem nem chamar o LLM |
+| Fora do assunto | `true` | chega ao modelo com contexto fraco e ele precisa recusar |
 
 A segunda família é onde o bot inventa se estiver mal calibrado. Na clínica de
 exemplo é o caso `cnpj`: fala da clínica (score 0.593) mas a resposta não existe
@@ -142,13 +180,14 @@ src/
     llm/             # cliente do modelo e montagem dos prompts
     tenant/          # carga do tenant e config efetiva
     conversation/    # janela de contexto e turno social (oi, obrigado, tchau)
+    agenda/          # grade de horários, operações, ferramentas do bot e lembretes
     avaliacao/       # regras de acerto, execução da suíte, arquivo, logs e estabilidade
     painel/          # números do painel (agregação é decisão, não formatação)
   storage/           # SQLite: conexão, migrations e repositórios
   adapters/
     cli/             # simulador no terminal (a borda que conhece o terminal)
-    web/             # servidor HTTP: conversa, testes e painel (a borda que conhece HTTP)
-  scripts/           # seed, ingestão, calibração, avaliação e relatório
+    web/             # servidor HTTP: conversa, agenda, testes e painel (a borda que conhece HTTP)
+  scripts/           # seed, ingestão, calibração, avaliação, relatório e lembretes
 data/tenants/<slug>/ # documentos + tenant.json + avaliacao.json (_ = não ingerido)
 logs/                # histórico das avaliações (versionado de propósito)
 tests/
@@ -176,7 +215,10 @@ Estão em `src/core/llm/prompts.ts` e valem para todo tenant:
    afirma disponibilidade sem consultar a agenda de verdade, e confirma com o
    cliente antes de cancelar ou remarcar — isso está na assinatura da
    ferramenta (`confirmado: boolean`), não só no prompt.
-8. Não tenta vender nem processar pagamento.
+8. **Lembra da consulta no dia dela**, uma vez só, e oferece remarcar ou
+   cancelar na própria mensagem. O lembrete é enfileirado no `outbox`; quem o
+   entrega nesta fase é `npm run lembretes`.
+9. Não tenta vender nem processar pagamento.
 
 Não são regras estéticas: no WhatsApp cada mensagem enviada tem custo, então
 verbosidade vira prejuízo.
@@ -273,7 +315,7 @@ seção mais importante: separa "eu piorei" de "o modelo variou".
 Os logs são versionados de propósito. É com eles que se calibra limiar, top-k e
 prompt com dado em vez de impressão.
 
-## O limiar de confiança é porteiro, não juiz
+## O limiar de confiança não é porteiro nem juiz
 
 `npm run calibrar` mediu, na base da clínica de exemplo, que os dois grupos de
 perguntas **se sobrepõem**:
@@ -284,13 +326,19 @@ perguntas **se sobrepõem**:
 `"qual o CNPJ da clínica?"` tira 0.593 porque *fala* da clínica — só que a
 resposta não existe nos documentos. Nenhum número separa os dois grupos.
 
-Por isso o limiar (0.40) é escolhido para ficar **abaixo da pergunta legítima
-mais fraca**: ele nunca barra cliente de verdade, e ainda assim filtra de graça
-o que é claramente fora do assunto. Quem julga o resto é o LLM, com a regra de
-recusar quando o contexto não responde.
+Ele já foi porteiro: abaixo do limiar, o bot respondia a frase de handoff sem
+nem chamar o modelo. **Isso saiu**, porque medindo a conversa de verdade a conta
+não fechava: `"boa tarde"` tirou 0.370 e chamou um atendente para responder a um
+cumprimento. O limiar estava separando o que não dava para separar.
+
+Hoje ele tem papel menor e honesto: escolhe se o contexto vai ao modelo como
+firme ou marcado como fraco, e alimenta o `melhorScore` que o painel mostra. A
+saída seca sobrou para um caso só — tenant sem chunk nenhum indexado. Quem
+decide se é para escalar é o modelo.
 
 Rode o `calibrar` de novo sempre que trocar o modelo de embeddings ou mexer
-bastante nos documentos.
+bastante nos documentos: o número continua valendo para saber se os documentos
+estão cobrindo as perguntas.
 
 ## Estado atual
 
@@ -298,13 +346,17 @@ Acompanhe em [PROGRESSO.md](PROGRESSO.md) — passo a passo do que foi feito, o 
 falta e por que cada decisão foi tomada. Atualizado ao fim de cada etapa.
 
 
-**As 4 etapas da fase local estão prontas.** Ingestão, busca, CLI, estado de
-conversa com janela de contexto, handoff persistido, contabilidade de custo por
-mensagem, adaptador web com painel e bateria de testes, suíte de avaliação com
-logs e medição de estabilidade.
+**As 4 etapas da fase local estão prontas**, e mais três frentes depois delas:
+ingestão, busca, CLI, estado de conversa com janela de contexto e memória
+compactada, handoff com botão de volta, contabilidade de custo por mensagem,
+adaptador web com conversa, agenda, painel e bateria de testes, suíte de
+avaliação com logs e medição de estabilidade, e a **agenda completa** — a
+recepção opera pela página, o bot marca, remarca e cancela por tool calling, e o
+lembrete do dia sai pelo `outbox`.
 
-336 testes unitários offline. Última medição: **100% de acurácia e 100% de
-estabilidade** em 5 rodadas consecutivas.
+355 testes unitários offline. Última medição de acurácia: **100% de acurácia e
+100% de estabilidade** em 5 rodadas consecutivas — medido antes das mudanças de
+prompt da agenda, então precisa ser refeito.
 
 **Próximo passo natural:** trocar os documentos da clínica fictícia pelos de um
 cliente real, escrever as perguntas de avaliação desse cliente e calibrar. Só

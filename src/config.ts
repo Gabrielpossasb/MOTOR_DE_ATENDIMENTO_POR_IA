@@ -150,6 +150,28 @@ export const config = {
      * responder.
      */
     maximoDeVoltas: 3,
+
+    /** Lembrete enviado no dia da consulta. */
+    lembrete: {
+      /**
+       * `kind` da linha no outbox.
+       *
+       * É metade do índice único `(appointment_id, kind)`, que é o que garante
+       * a idempotência. Mudar este valor faz o comando gerar de novo tudo que
+       * já tinha sido gerado — um lembrete repetido por consulta.
+       */
+      tipo: 'lembrete_dia',
+      /**
+       * Hora em que o lembrete deve sair, no dia da consulta.
+       *
+       * Precisa ser ANTES do primeiro horário da grade, senão o lembrete da
+       * consulta das 08:00 sairia depois dela. Se alguma agenda abrir mais
+       * cedo, baixe este valor — `previstoPara` tem uma trava que nunca deixa
+       * o lembrete cair depois da consulta, mas trava é rede de segurança, não
+       * configuração.
+       */
+      horaDeEnvio: '07:30',
+    },
   },
 
   /** Estado e janela de contexto da conversa. */

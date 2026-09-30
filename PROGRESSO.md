@@ -3,9 +3,11 @@
 Arquivo vivo: atualizado ao fim de cada etapa. Serve para você acompanhar e
 para uma sessão nova retomar o trabalho sem precisar reconstruir o contexto.
 
-**Última atualização:** 2026-09-25, com a bateria de testes na web.
-**Estado:** todas as 4 etapas da fase local concluídas. A fase está pronta para
-receber os documentos de um cliente real e ser calibrada com perguntas de verdade.
+**Última atualização:** 2026-09-29, com a agenda completa (as três fases).
+**Estado:** as 4 etapas da fase local concluídas, mais a conversa que não trava e
+a agenda inteira — a recepção opera pela página, o bot marca/remarca/cancela, e o
+lembrete do dia sai pelo `outbox`. A fase está pronta para receber os documentos
+de um cliente real e ser calibrada com perguntas de verdade.
 
 ---
 
@@ -38,7 +40,7 @@ Comandos de qualidade:
 | Comando | O que faz | Custo |
 |---|---|---|
 | `npm run novo-tenant -- <slug> "<Nome>"` | cria a pasta de um cliente novo com modelos | zero |
-| `npm test` | 336 testes unitários, offline | zero |
+| `npm test` | 355 testes unitários, offline | zero |
 | `npm run typecheck` | checagem de tipos | zero |
 | `npm run calibrar -- <slug>` | mede scores de busca para ajustar o limiar | ~US$ 0,000005 |
 | `npm run avaliar -- <slug>` | 28 perguntas contra a API real, gera logs | ~US$ 0,01 |
@@ -46,6 +48,8 @@ Comandos de qualidade:
 | `npm run relatorio` | histórico de todas as avaliações | zero |
 | `npm run relatorio -- <id>` | trajetória de uma pergunta | zero |
 | `npm run relatorio -- --instaveis` | perguntas que oscilam | zero |
+| `npm run lembretes -- <slug>` | enfileira os lembretes das consultas de hoje e lista a fila | zero |
+| `npm run lembretes -- <slug> --enviar` | marca a fila do dia como enviada | zero |
 | `npm run web -- <slug>` | conversa em `/`, agenda em `/agenda`, testes em `/testes`, painel em `/painel` | por mensagem |
 
 ---
@@ -123,7 +127,7 @@ Estado de conversa, handoff persistido, contabilidade e política de testes.
 **Dois tipos, separados de propósito.** Juntos os dois pioram: o determinístico
 fica lento e caro, o não-determinístico some no ruído.
 
-**`npm test`** — 336 testes unitários, offline, grátis, ~3s. Rode a cada
+**`npm test`** — 355 testes unitários, offline, grátis, ~5s. Rode a cada
 salvamento. Embedder e LLM são sempre dublês; **nenhum teste unitário toca a
 rede**. Um teste só entra se falha por *um* motivo nomeável, se o nome descreve
 comportamento (não implementação), e — quando nasce de bug real — traz comentário
@@ -761,6 +765,70 @@ números absolutos: mil mensagens por mês saem de US$ 0,46 para US$ 1,07.
 A suíte de avaliação **não cobre agenda**: como o motor não oferece ferramenta
 sem conversa, uma pergunta de agendamento no `avaliacao.json` mediria o bot sem
 as ferramentas. Testar fluxo de agenda é, por ora, conversar na página.
+
+---
+
+## O lembrete do dia da consulta (2026-09-29)
+
+Fase 3 de 3 da agenda, e a menor: a infraestrutura já existia desde a
+migration `003`. O comando `npm run lembretes -- <slug>` enfileira o lembrete de
+cada consulta do dia e lista a fila; `--enviar` marca como enviado.
+
+### Nada aqui envia nada
+
+O núcleo só escreve na tabela `outbox`. Nesta fase quem drena é o comando, que é
+o **dublê do canal** — e é isso que faz o WhatsApp entrar depois sem mexer no
+núcleo: o adaptador da Cloud API vai drenar a mesma tabela.
+
+### Idempotência é do banco, não do código
+
+Rodar o comando cinco vezes no mesmo dia gera um lembrete, e quem garante é o
+índice único `(appointment_id, kind)`. O `INSERT` usa
+`ON CONFLICT (appointment_id, kind) DO NOTHING` — conflito **alvejado**, e não um
+`INSERT OR IGNORE`: o IGNORE engoliria também um `NOT NULL` violado, e a falha
+apareceria como "nenhum lembrete gerado hoje", sem dizer por quê.
+
+Conferido rodando de verdade: primeira passada `gerados: 1`, segunda
+`gerados: 0 / já existiam: 1`.
+
+### Três casos em que o lembrete NÃO sai
+
+1. **Consulta cancelada.** Já estava resolvido na fase 1 — cancelar apaga o
+   lembrete pendente na mesma transação. Lembrete de consulta cancelada é pior
+   que lembrete nenhum: o cliente aparece na clínica.
+2. **Consulta que já começou.** Rodar o comando às 10:30 não manda lembrete da
+   consulta das 09:00 — ou a pessoa já está lá, ou já faltou, e a mensagem só
+   confunde.
+3. **Consulta de outro dia.** O comando é por dia, e `--data` escolhe qual.
+
+### O bug que esta fase revelou: remarcar deixava o lembrete velho
+
+`alterarAgendamento` mudava o horário e **não** tocava no outbox. O corpo do
+lembrete tem o horário escrito dentro dele, e o índice único impediria gerar um
+segundo — então remarcar de 09:00 para 15:00 mandaria o cliente para as 09:00 no
+dia da consulta. Passou a apagar o lembrete pendente na mesma transação, como o
+cancelamento já fazia, e a geração seguinte o refaz com o horário novo.
+
+Conferido rodando de verdade: remarcado para 15:00, a fila voltou a ter uma linha
+e o texto dizia 15:00.
+
+### A armadilha de fuso que ficou documentada em código
+
+`starts_at` e `scheduled_for` são hora de **parede local**; `sent_at` e
+`created_at` saem em **UTC**, porque vêm do `datetime('now')` do SQLite. Na
+verificação real isso apareceu à vista: consulta remarcada para 15:00 do dia 30 e
+`sent_at` gravado como `2026-09-30 00:22` — 21:22 aqui.
+
+Não é bug hoje, porque nada compara os dois. Mas um `WHERE scheduled_for <=
+datetime('now')` escrito de boa-fé pelo futuro adaptador mandaria o lembrete
+quatro horas adiantado em Campo Grande. Por isso a consulta de drenagem já existe
+no núcleo, `lembretesAEnviar(db, tenantId, agora)`, com o relógio injetado e o
+motivo escrito em cima — para ninguém precisar inventá-la depois.
+
+### O painel mostra a fila
+
+Porque nesta fase nada sai sozinho: se a fila tem linha de um dia que já passou,
+o comando não rodou. Sem isso, o lembrete não sair passaria em silêncio.
 
 ---
 

@@ -145,6 +145,18 @@ export function dataLocal(momento: Date = new Date()): string {
   return `${ano}-${mes}-${dia}`;
 }
 
+/**
+ * 'YYYY-MM-DD HH:MM' do relógio local — o mesmo formato de `starts_at`.
+ *
+ * Existe para poder comparar "agora" com um horário marcado por texto. Nesse
+ * formato, comparação lexicográfica é comparação cronológica, e assim não
+ * aparece nenhum `Date` no meio de uma conta sobre hora de parede.
+ */
+export function momentoLocal(momento: Date = new Date()): string {
+  const hora = paraHora(momento.getHours() * 60 + momento.getMinutes());
+  return `${dataLocal(momento)} ${hora}`;
+}
+
 export function somarDias(data: string, dias: number): string {
   const [ano, mes, dia] = data.split('-').map(Number);
   const d = new Date(Date.UTC(ano ?? 0, (mes ?? 1) - 1, dia ?? 1));

@@ -201,6 +201,11 @@ export function buscarPorId(db: Db, id: number): Agendamento | undefined {
  * `contatoId` presente restringe ao dono: é assim que o bot não alcança a
  * consulta de outra pessoa. O painel chama sem, porque do outro lado está a
  * recepção.
+ *
+ * Apaga o lembrete pendente pelo mesmo motivo do cancelamento, e por um a mais:
+ * o corpo do lembrete tem o horário escrito dentro dele, e o índice único
+ * `(appointment_id, kind)` impediria gerar um segundo. Sem apagar aqui, remarcar
+ * de 09:00 para 15:00 mandaria o cliente para as 09:00 no dia da consulta.
  */
 export function alterarAgendamento(
   db: Db,
@@ -219,10 +224,12 @@ export function alterarAgendamento(
   if (problema) return problema;
 
   try {
-    db.prepare("UPDATE appointments SET starts_at = ?, updated_at = datetime('now') WHERE id = ?").run(
-      novoInicio,
-      id,
-    );
+    db.transaction(() => {
+      db.prepare(
+        "UPDATE appointments SET starts_at = ?, updated_at = datetime('now') WHERE id = ?",
+      ).run(novoInicio, id);
+      db.prepare('DELETE FROM outbox WHERE appointment_id = ? AND sent_at IS NULL').run(id);
+    })();
   } catch (erro) {
     if (ehConflitoDeVaga(erro)) {
       return { ok: false, motivo: 'conflito', detalhe: 'esse horário já está ocupado' };

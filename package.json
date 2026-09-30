@@ -15,6 +15,7 @@
     "calibrar": "tsx src/scripts/calibrar.ts",
     "avaliar": "tsx src/scripts/avaliar.ts",
     "relatorio": "tsx src/scripts/relatorio.ts",
+    "lembretes": "tsx src/scripts/lembretes.ts",
     "web": "tsx src/adapters/web/server.ts"
   },
   "dependencies": {

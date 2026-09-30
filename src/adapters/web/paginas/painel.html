@@ -175,6 +175,9 @@
       <h2>Handoffs para revisar</h2>
       <div id="handoffs"></div>
 
+      <h2>Lembretes na fila</h2>
+      <div id="lembretes"></div>
+
       <h2>Perguntas sem resposta</h2>
       <div id="unanswered"></div>
 
@@ -229,6 +232,7 @@
           cartao('Custo acumulado', moeda(p.custo.acumuladoUsd), moeda(p.custo.medioPorMensagemUsd) + ' por resposta'),
           cartao('Mensagens', p.mensagens.total, p.mensagens.doBot + ' do bot · ' + p.mensagens.latenciaMediaMs + 'ms em média'),
           cartao('Sem resposta', p.perguntasSemResposta.length, 'buracos na base de conhecimento'),
+          cartao('Lembretes na fila', p.lembretesPendentes.length, 'esperando o comando de envio'),
         ].join('');
 
         // Handoffs pendentes: a fila do colaborador. "bot voltou" quer dizer
@@ -274,6 +278,29 @@
             atualizar();
           });
         }
+
+        // Lembretes na fila: nesta fase ninguém envia sozinho. Se esta lista
+        // tem linha de um dia que já passou, o comando não rodou.
+        const lembretes = p.lembretesPendentes;
+        document.getElementById('lembretes').innerHTML =
+          lembretes.length === 0
+            ? '<div class="vazio">Nenhum lembrete esperando envio. Gerar os de hoje: <code>npm run lembretes -- ' +
+              escapar(p.tenant.slug) +
+              '</code></div>'
+            : '<table><thead><tr><th>Sai em</th><th>Contato</th><th>Mensagem</th></tr></thead><tbody>' +
+              lembretes
+                .map(
+                  (l) =>
+                    '<tr><td>' +
+                    escapar(l.previstoPara) +
+                    '</td><td>' +
+                    escapar(l.contatoId) +
+                    '</td><td class="truncar">' +
+                    escapar(l.corpo) +
+                    '</td></tr>',
+                )
+                .join('') +
+              '</tbody></table>';
 
         // Perguntas sem resposta: a lista que diz que documento falta escrever.
         const semResposta = p.perguntasSemResposta;

@@ -14,6 +14,7 @@ import {
   type HandoffPendente,
   type PerguntaSemResposta,
 } from '../../storage/repositories/handoffs.js';
+import { listarLembretes, type Lembrete } from '../agenda/lembretes.js';
 
 export interface ResumoDeConversa {
   id: number;
@@ -56,6 +57,14 @@ export interface PainelDoTenant {
   };
   /** Handoffs que ninguem da equipe revisou ainda. */
   handoffsPendentes: HandoffPendente[];
+  /**
+   * Lembretes enfileirados que ainda não saíram.
+   *
+   * Nesta fase nada sai sozinho: quem drena é `npm run lembretes -- <slug>`.
+   * A fila aparecer no painel é o que faz a recepção notar que o comando não
+   * rodou hoje — senão o lembrete não sair passaria em silêncio.
+   */
+  lembretesPendentes: Lembrete[];
   perguntasSemResposta: PerguntaSemResposta[];
   listaDeConversas: ResumoDeConversa[];
 }
@@ -102,6 +111,7 @@ export function montarPainel(db: Db, slug: string, limiteDeConversas = 50): Pain
     taxaDeResolucao:
       totalDeConversas === 0 ? 0 : (totalDeConversas - tiveramHandoff) / totalDeConversas,
     handoffsPendentes: listarHandoffsPendentes(db, tenant.id),
+    lembretesPendentes: listarLembretes(db, tenant.id, { limite: 50 }),
     mensagens: {
       total: mensagens.total,
       doBot,
