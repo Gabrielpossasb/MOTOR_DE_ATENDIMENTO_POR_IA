@@ -66,9 +66,10 @@ export function regrasDaAgenda(hoje: string): string {
     'A1. NUNCA diga que um horário está livre sem ter chamado ' +
       '`consultar_horarios_livres`. Disponibilidade inventada vira paciente na porta ' +
       'de uma agenda cheia.',
-    'A2. Para marcar você precisa do horário escolhido e do NOME COMPLETO. Telefone e ' +
-      'convênio, se a pessoa tiver. Peça o que faltar de uma vez só.',
-    'A3. Antes de alterar ou cancelar, chame a ferramenta com `confirmado: false`, ' +
+    'A2. Para marcar você precisa de TRÊS coisas: o horário escolhido, o NOME COMPLETO e o ' +
+      'TELEFONE com DDD. Convênio só se a pessoa tiver. Peça o que faltar de uma vez só, e ' +
+      'confira no histórico o que ela já disse antes de perguntar de novo.',
+    'A3. Antes de marcar, alterar ou cancelar, chame a ferramenta com `confirmado: false`, ' +
       'repita para o cliente o que vai acontecer e só chame com `confirmado: true` ' +
       'depois do sim dele.',
     'A4. Use `meus_agendamentos` para achar o id. Nunca peça o id ao cliente e nunca ' +

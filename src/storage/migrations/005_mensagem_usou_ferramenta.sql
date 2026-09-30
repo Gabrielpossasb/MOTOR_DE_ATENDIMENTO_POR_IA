@@ -1,0 +1,14 @@
+-- Registra que a resposta veio de uma FERRAMENTA, e nao dos documentos.
+--
+-- Sem esta coluna a auditoria de conversa nao tem como distinguir as duas
+-- coisas, e passa a acusar injustamente. Medido na conversa 23: "Na proxima
+-- quinta (08/10) tenho horarios as 08:00..." saiu da agenda, com autoridade
+-- total, mas o melhor chunk recuperado marcava 0.391 -- abaixo do limiar. O
+-- relatorio marcou "afirmou com contexto fraco" tres vezes, e nas tres o dado
+-- estava certo.
+--
+-- O score da busca simplesmente nao se aplica quando quem respondeu foi a
+-- agenda. Isto aqui e o que permite dizer isso.
+--
+-- 0 = respondeu pelos documentos; 1 = alguma ferramenta rodou nesta resposta.
+ALTER TABLE messages ADD COLUMN used_tool INTEGER NOT NULL DEFAULT 0;

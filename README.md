@@ -236,7 +236,11 @@ Estão em `src/core/llm/prompts.ts` e valem para todo tenant:
 8. **Lembra da consulta no dia dela**, uma vez só, e oferece remarcar ou
    cancelar na própria mensagem. O lembrete é enfileirado no `outbox`; quem o
    entrega nesta fase é `npm run lembretes`.
-9. Não tenta vender nem processar pagamento.
+9. Para marcar, precisa de **horário, nome completo e telefone com DDD**, e
+   repete os dados antes de gravar. Os três estão na assinatura da ferramenta,
+   não no prompt — e o telefone é conferido por contagem de dígitos, porque
+   campo obrigatório de texto aceita "não informado".
+10. Não tenta vender nem processar pagamento.
 
 Não são regras estéticas: no WhatsApp cada mensagem enviada tem custo, então
 verbosidade vira prejuízo.
@@ -372,7 +376,7 @@ avaliação com logs e medição de estabilidade, e a **agenda completa** — a
 recepção opera pela página, o bot marca, remarca e cancela por tool calling, e o
 lembrete do dia sai pelo `outbox`.
 
-355 testes unitários offline. Última medição de acurácia: **100% de acurácia e
+386 testes unitários offline. Última medição de acurácia: **100% de acurácia e
 100% de estabilidade** em 5 rodadas consecutivas — medido antes das mudanças de
 prompt da agenda, então precisa ser refeito.
 

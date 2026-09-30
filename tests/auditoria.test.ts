@@ -37,12 +37,20 @@ function cliente(conteudo: string): MensagemGravada {
     custoUsd: null,
     latenciaMs: null,
     fontes: [],
+    usouFerramenta: false,
     criadaEm: '2026-09-29 12:00:00',
   };
 }
 
-/** Resposta do bot. `score` vira a fonte citada; `null` = não citou nenhuma. */
-function bot(conteudo: string, score: number | null = 0.6): MensagemGravada {
+/**
+ * Resposta do bot. `score` vira a fonte citada; `null` = não citou nenhuma.
+ * `usouFerramenta` marca a resposta que saiu da agenda, e não dos documentos.
+ */
+function bot(
+  conteudo: string,
+  score: number | null = 0.6,
+  usouFerramenta = false,
+): MensagemGravada {
   proximoId += 1;
   const fontes: Fonte[] = score === null ? [] : [{ arquivo: 'faq.md', score }];
 
@@ -56,6 +64,7 @@ function bot(conteudo: string, score: number | null = 0.6): MensagemGravada {
     custoUsd: 0.001,
     latenciaMs: 1500,
     fontes,
+    usouFerramenta,
     criadaEm: '2026-09-29 12:00:01',
   };
 }
@@ -191,6 +200,35 @@ describe('o que a auditoria NÃO pode acusar', () => {
     }
   });
 
+  it('frase curta ANTES de pedir o nome não é o nome', () => {
+    // Achado na conversa 23: "boa boa" abriu a conversa, tem duas palavras e só
+    // letras — forma de nome. Foi contado como o nome do cliente, e os dois
+    // pedidos seguintes viraram "pediu o nome, que a conversa já tinha".
+    //
+    // Nome não tem formato que o separe de uma frase curta qualquer. O que o
+    // separa é vir DEPOIS de alguém perguntar.
+    const r = auditar([
+      cliente('boa boa'),
+      bot('Oi! Como posso te ajudar?', 0.3),
+      cliente('quero marcar'),
+      bot('Me manda seu nome completo, por favor.'),
+    ]);
+
+    expect(tipos(r)).toEqual([]);
+  });
+
+  it('telefone e data valem mesmo sem ninguém ter pedido', () => {
+    // A trava acima é só do nome: telefone e data têm formato próprio, e o
+    // cliente pode dar de mão beijada. Se a trava valesse para todos, "quero
+    // dia 8" seguido de "qual dia?" deixaria de ser acusado.
+    const r = auditar([
+      cliente('quero marcar na proxima sexta, meu fone e 67999359933'),
+      bot('Qual o seu telefone? Me confirma a data exata também.'),
+    ]);
+
+    expect(tipos(r)).toEqual(['pedido_repetido', 'pedido_repetido']);
+  });
+
   it('hora não conta como telefone', () => {
     // "as 9" tem dígito. Se contasse como telefone, pedir o telefone depois
     // viraria esquecimento.
@@ -222,6 +260,19 @@ describe('contexto fraco', () => {
     // "Me confirma seu nome" com score 0.31 não afirma nada. Acusar aqui
     // encheria o relatório de ruído e esconderia o caso que importa.
     const r = auditar([cliente('gabriel abraao possas borges'), bot('Perfeito, Gabriel.', 0.31)]);
+
+    expect(tipos(r)).toEqual([]);
+  });
+
+  it('NÃO acusa resposta que veio da FERRAMENTA', () => {
+    // Achado na conversa 23: "tenho horários às 08:00, 09:00..." saiu da agenda,
+    // com autoridade total, e o melhor chunk recuperado marcava 0.391. O
+    // relatório acusou três vezes, e nas três o dado estava certo. O score da
+    // busca não se aplica quando quem respondeu foi a ferramenta.
+    const r = auditar([
+      cliente('quero na proxima quinta'),
+      bot('Na próxima quinta (08/10) tenho 08:00, 09:00 e 10:00.', 0.391, true),
+    ]);
 
     expect(tipos(r)).toEqual([]);
   });

@@ -175,12 +175,27 @@ function dadosPedidosEm(resposta: string): Set<string> {
   return pedidos;
 }
 
-/** O cliente forneceu este dado nesta mensagem? */
-function clienteForneceu(dado: DadoDoAtendimento, mensagem: string): boolean {
+/**
+ * O cliente forneceu este dado nesta mensagem?
+ *
+ * @param jaFoiPedido se o bot já pediu este dado antes. Só o NOME depende
+ *        disso, e o motivo saiu de um falso positivo real: `"boa boa"` tem a
+ *        forma de nome — duas palavras, só letras — e foi contado como o nome
+ *        do cliente na primeira mensagem da conversa 23. Nome não tem formato
+ *        que o distinga de uma frase curta qualquer; o que o distingue é vir
+ *        DEPOIS de alguém perguntar. Telefone, data e hora têm formato próprio
+ *        e continuam valendo a qualquer momento, porque o cliente pode dizer
+ *        "quero dia 8 às 9" sem ninguém ter pedido.
+ */
+function clienteForneceu(
+  dado: DadoDoAtendimento,
+  mensagem: string,
+  jaFoiPedido: boolean,
+): boolean {
   if (!dado.fornecido) return false;
 
   const texto = mensagem.trim();
-  if (dado.id === 'nome' && NAO_E_NOME.test(texto)) return false;
+  if (dado.id === 'nome' && (!jaFoiPedido || NAO_E_NOME.test(texto))) return false;
 
   return dado.fornecido.test(texto);
 }
@@ -222,7 +237,9 @@ export function auditarConversa(
   for (const mensagem of mensagens) {
     if (mensagem.papel === 'user') {
       for (const dado of DADOS) {
-        if (clienteForneceu(dado, mensagem.conteudo)) jaFornecido.add(dado.id);
+        if (clienteForneceu(dado, mensagem.conteudo, jaPedido.has(dado.id))) {
+          jaFornecido.add(dado.id);
+        }
       }
       continue;
     }
@@ -287,7 +304,16 @@ export function auditarConversa(
         grave: true,
         detalhe: 'respondeu sem citar fonte, e a mensagem do cliente não era social',
       });
-    } else if (score !== null && score < limiar && AFIRMA_DADO.test(mensagem.conteudo)) {
+    } else if (
+      score !== null &&
+      score < limiar &&
+      // Quem respondeu foi a agenda: o score da busca não se aplica. Medido na
+      // conversa 23 — "tenho horários às 08:00..." saiu da ferramenta, com
+      // autoridade total, e o melhor chunk marcava 0.391. O relatório acusou
+      // três vezes, e nas três o dado estava certo.
+      !mensagem.usouFerramenta &&
+      AFIRMA_DADO.test(mensagem.conteudo)
+    ) {
       registrar({
         tipo: 'afirmou_com_contexto_fraco',
         grave: true,

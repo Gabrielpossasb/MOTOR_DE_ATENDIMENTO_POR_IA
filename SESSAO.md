@@ -4,7 +4,7 @@ Arquivo de handoff entre sessões. O `PROGRESSO.md` conta o que o projeto **é**
 este conta o que está **em andamento agora**.
 
 **Última sessão:** 2026-09-29
-**Estado:** suíte **verde** — 355 testes offline, typecheck limpo, e a suíte paga
+**Estado:** suíte **verde** — 386 testes offline, typecheck limpo, e a suíte paga
 em **100% de acurácia e 100% de estabilidade** (5 rodadas, 28 perguntas).
 **Branch:** `conversa-natural`, à frente de `main`.
 **Próximo:** a coleta de dados repetida na conversa (ver a seção da conversa real
@@ -88,6 +88,21 @@ turnos para coletar o que caberia em 2. Nada disto está corrigido:
 Os itens 1, 2 e 3 são a mesma raiz: **o modelo tem o histórico, mas não está sendo
 obrigado a usá-lo antes de pedir de novo.** É a próxima frente óbvia de prompt, e
 dá para medir na página.
+
+### Conversa 23 (2026-09-30): marcou sem telefone e sem confirmar
+
+E o bot **não desobedeceu nada** — `criar_agendamento` não exigia nenhum dos
+dois. Corrigido no contrato, não no prompt; detalhe em `PROGRESSO.md`, "Marcar
+também precisa de contrato". A avaliação paga não precisou ser refeita: as regras
+de agenda só entram no prompt quando há ferramenta, e `avaliar` roda sem conversa.
+
+A mesma conversa achou **dois falsos positivos da auditoria** (`"boa boa"` lido
+como nome; score de busca cobrado de resposta que veio da ferramenta). Os dois
+corrigidos com teste, e o segundo exigiu a migration `005` — `messages.used_tool`.
+
+**Mensagem gravada antes da migration não tem essa informação**, então a conversa
+23 ainda mostra três `afirmou_com_contexto_fraco` que não são defeito. Conversa
+nova sai certa.
 
 ### Agora isso é detectado sozinho
 

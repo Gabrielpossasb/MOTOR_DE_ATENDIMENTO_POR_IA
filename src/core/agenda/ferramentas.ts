@@ -64,17 +64,30 @@ export const FERRAMENTAS_DA_AGENDA: Ferramenta[] = [
   {
     nome: 'criar_agendamento',
     descricao:
-      'Marca uma consulta. Só chame depois de ter o horário livre confirmado e o nome completo do paciente.',
+      'Marca uma consulta. Chame primeiro com confirmado=false para repetir os dados ao cliente, ' +
+      'e só depois com confirmado=true.',
     parametros: {
       type: 'object',
       properties: {
         inicio: INICIO,
         nome: { type: 'string', description: 'Nome completo do paciente.' },
+        // Obrigatório desde que uma conversa real marcou sem telefone: a clínica
+        // ficou com uma consulta e nenhum jeito de avisar a pessoa se precisasse
+        // desmarcar.
+        telefone: {
+          type: 'string',
+          description:
+            'Telefone de contato com DDD, só dígitos. Peça ao cliente; nunca invente nem ' +
+            'escreva "não informado".',
+        },
         servico: { type: 'string', description: 'Procedimento desejado, se o cliente disse.' },
-        telefone: { type: 'string', description: 'Telefone de contato, se o cliente deu.' },
         convenio: { type: 'string', description: 'Nome do convênio, se houver.' },
+        confirmado: {
+          type: 'boolean',
+          description: 'false devolve os dados para você conferir com o cliente; true marca.',
+        },
       },
-      required: ['inicio', 'nome'],
+      required: ['inicio', 'nome', 'telefone', 'confirmado'],
       additionalProperties: false,
     },
   },
@@ -171,6 +184,34 @@ function despachar(
       };
 
     case 'criar_agendamento': {
+      // `required` no schema não basta: um campo obrigatório de texto aceita
+      // "não informado" e o modelo preencheria para poder chamar. Quem barra é
+      // esta checagem, que conta dígito.
+      const telefone = texto(a.telefone);
+      if (!telefoneEhPlausivel(telefone)) {
+        return recusa(
+          'dados_incompletos',
+          'falta o telefone do paciente, com DDD. Peça ao cliente antes de marcar.',
+        );
+      }
+
+      // Mesma disciplina de alterar e cancelar: o cliente ouve o que vai ser
+      // marcado antes de virar linha no banco. Campo ausente vale como não
+      // confirmado — de propósito, para o silêncio errar para o lado seguro.
+      if (a.confirmado !== true) {
+        return {
+          confirmacao_pendente: true,
+          marcaria: {
+            inicio: texto(a.inicio),
+            nome: texto(a.nome),
+            telefone,
+            ...(texto(a.convenio) ? { convenio: texto(a.convenio) } : {}),
+            ...(texto(a.servico) ? { servico: texto(a.servico) } : {}),
+          },
+          instrucao: 'Repita esses dados ao cliente e chame de novo com confirmado=true.',
+        };
+      }
+
       if (ctx.semPersistir) {
         return { simulado: true, aviso: 'Modo de avaliação: nada foi gravado.' };
       }
@@ -184,8 +225,8 @@ function despachar(
           contatoId: ctx.contatoId,
           inicio: texto(a.inicio),
           nome: texto(a.nome),
+          telefone,
           ...(texto(a.servico) ? { servico: texto(a.servico) } : {}),
-          ...(texto(a.telefone) ? { telefone: texto(a.telefone) } : {}),
           ...(texto(a.convenio) ? { convenio: texto(a.convenio) } : {}),
           ...(ctx.conversaId !== undefined ? { conversaId: ctx.conversaId } : {}),
         },
@@ -272,6 +313,19 @@ function texto(valor: unknown): string {
 function inteiro(valor: unknown): number {
   const n = typeof valor === 'number' ? valor : Number(valor);
   return Number.isInteger(n) ? n : -1;
+}
+
+/**
+ * Parece um telefone brasileiro com DDD?
+ *
+ * Conta DÍGITO, e não tamanho de string, porque o campo obrigatório do schema
+ * aceita qualquer texto: "não informado" tem 13 caracteres e nenhum telefone
+ * dentro. Dez dígitos é fixo com DDD, onze é celular. Sem teto rígido para não
+ * recusar quem escreve "+55 (67) 99935-9933".
+ */
+export function telefoneEhPlausivel(valor: string): boolean {
+  const digitos = valor.replace(/\D/g, '');
+  return digitos.length >= 10 && digitos.length <= 15;
 }
 
 /**

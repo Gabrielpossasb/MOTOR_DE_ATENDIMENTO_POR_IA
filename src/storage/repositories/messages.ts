@@ -14,6 +14,8 @@ export interface MensagemGravada {
   custoUsd: number | null;
   latenciaMs: number | null;
   fontes: Fonte[];
+  /** A resposta veio de uma ferramenta (agenda), e nao dos documentos. */
+  usouFerramenta: boolean;
   criadaEm: string;
 }
 
@@ -26,6 +28,7 @@ export interface MensagemParaGravar {
   custoUsd?: number;
   latenciaMs?: number;
   fontes?: Fonte[];
+  usouFerramenta?: boolean;
 }
 
 export function gravarMensagem(db: Db, mensagem: MensagemParaGravar): number {
@@ -33,9 +36,9 @@ export function gravarMensagem(db: Db, mensagem: MensagemParaGravar): number {
     .prepare(
       `INSERT INTO messages
          (conversation_id, role, content, tokens_in, tokens_out,
-          estimated_cost_usd, latency_ms, sources)
+          estimated_cost_usd, latency_ms, sources, used_tool)
        VALUES (@conversaId, @papel, @conteudo, @tokensEntrada, @tokensSaida,
-               @custoUsd, @latenciaMs, @fontes)`,
+               @custoUsd, @latenciaMs, @fontes, @usouFerramenta)`,
     )
     .run({
       conversaId: mensagem.conversaId,
@@ -46,6 +49,7 @@ export function gravarMensagem(db: Db, mensagem: MensagemParaGravar): number {
       custoUsd: mensagem.custoUsd ?? null,
       latenciaMs: mensagem.latenciaMs ?? null,
       fontes: mensagem.fontes ? JSON.stringify(mensagem.fontes) : null,
+      usouFerramenta: mensagem.usouFerramenta ? 1 : 0,
     });
 
   return Number(resultado.lastInsertRowid);
@@ -61,6 +65,7 @@ interface LinhaMensagem {
   estimated_cost_usd: number | null;
   latency_ms: number | null;
   sources: string | null;
+  used_tool: number;
   created_at: string;
 }
 
@@ -75,6 +80,7 @@ function paraMensagem(linha: LinhaMensagem): MensagemGravada {
     custoUsd: linha.estimated_cost_usd,
     latenciaMs: linha.latency_ms,
     fontes: linha.sources ? (JSON.parse(linha.sources) as Fonte[]) : [],
+    usouFerramenta: linha.used_tool === 1,
     criadaEm: linha.created_at,
   };
 }
@@ -92,7 +98,7 @@ export function ultimasMensagens(db: Db, conversaId: number, limite: number): Me
   const linhas = db
     .prepare(
       `SELECT id, conversation_id, role, content, tokens_in, tokens_out,
-              estimated_cost_usd, latency_ms, sources, created_at
+              estimated_cost_usd, latency_ms, sources, used_tool, created_at
        FROM messages
        WHERE conversation_id = ?
        ORDER BY id DESC
@@ -113,7 +119,7 @@ export function mensagensApos(db: Db, conversaId: number, apos: number): Mensage
   const linhas = db
     .prepare(
       `SELECT id, conversation_id, role, content, tokens_in, tokens_out,
-              estimated_cost_usd, latency_ms, sources, created_at
+              estimated_cost_usd, latency_ms, sources, used_tool, created_at
        FROM messages
        WHERE conversation_id = ? AND id > ?
        ORDER BY id ASC`,

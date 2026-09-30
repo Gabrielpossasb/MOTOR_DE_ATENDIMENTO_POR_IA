@@ -21,6 +21,7 @@ import {
 import { criarAgendamento, buscarPorId } from '../src/core/agenda/agenda-service.js';
 import { salvarDocumento } from '../src/storage/repositories/documents.js';
 import { inserirChunks } from '../src/storage/repositories/chunks.js';
+import { mensagensApos } from '../src/storage/repositories/messages.js';
 import { Motor } from '../src/core/engine.js';
 import { config } from '../src/config.js';
 import { EmbedderFake, vetorDeTexto } from './helpers/fake-embedder.js';
@@ -140,11 +141,25 @@ describe('consultar e listar', () => {
   });
 });
 
+/**
+ * Os dados mínimos para marcar, já confirmados.
+ *
+ * Telefone e `confirmado` entraram no contrato depois de uma conversa real: o
+ * bot marcou sem telefone nenhum e sem repetir os dados ao cliente, porque nada
+ * o obrigava. A clínica ficou com uma consulta e sem como avisar a pessoa.
+ */
+const MARCACAO = {
+  inicio: '',
+  nome: 'Maria Silva',
+  telefone: '67999359933',
+  confirmado: true,
+};
+
 describe('marcar', () => {
   it('marca e devolve o agendamento', () => {
     const r = rodar('criar_agendamento', {
+      ...MARCACAO,
       inicio: `${SEGUNDA} 09:00`,
-      nome: 'Maria Silva',
       servico: 'limpeza',
     }) as { ok: boolean; agendamento: { id: number; nome: string } };
 
@@ -152,10 +167,70 @@ describe('marcar', () => {
     expect(buscarPorId(db, r.agendamento.id)?.nome).toBe('Maria Silva');
   });
 
+  it('EXIGE telefone: sem ele, não marca', () => {
+    // `required` no schema não basta, e por isso a checagem conta dígito: um
+    // campo obrigatório de texto aceita "não informado".
+    for (const telefone of ['', 'não informado', 'a combinar', '9999']) {
+      const r = rodar('criar_agendamento', {
+        ...MARCACAO,
+        inicio: `${SEGUNDA} 09:00`,
+        telefone,
+      });
+
+      expect(r.ok, `telefone "${telefone}" não deveria passar`).toBe(false);
+      expect(r.motivo).toBe('dados_incompletos');
+    }
+
+    const total = db.prepare('SELECT COUNT(*) AS t FROM appointments').get() as { t: number };
+    expect(total.t).toBe(0);
+  });
+
+  it('aceita telefone escrito como gente escreve', () => {
+    const r = rodar('criar_agendamento', {
+      ...MARCACAO,
+      inicio: `${SEGUNDA} 09:00`,
+      telefone: '+55 (67) 99935-9933',
+    });
+
+    expect(r.ok).toBe(true);
+  });
+
+  it('com confirmado=false NÃO marca: devolve o que marcaria', () => {
+    // Mesma disciplina de alterar e cancelar. Saiu de uma conversa real em que
+    // o bot respondeu "Pronto, agendei" logo depois de receber o nome, sem o
+    // cliente ter visto o que ia ser marcado.
+    const r = rodar('criar_agendamento', {
+      ...MARCACAO,
+      inicio: `${SEGUNDA} 09:00`,
+      confirmado: false,
+    }) as { confirmacao_pendente: boolean; marcaria: { inicio: string; telefone: string } };
+
+    expect(r.confirmacao_pendente).toBe(true);
+    expect(r.marcaria.inicio).toBe(`${SEGUNDA} 09:00`);
+    expect(r.marcaria.telefone).toBe('67999359933');
+
+    const total = db.prepare('SELECT COUNT(*) AS t FROM appointments').get() as { t: number };
+    expect(total.t).toBe(0);
+  });
+
+  it('confirmado AUSENTE vale como não confirmado', () => {
+    // O silêncio erra para o lado seguro: modelo que esquece o campo não marca.
+    const r = rodar('criar_agendamento', {
+      inicio: `${SEGUNDA} 09:00`,
+      nome: 'Maria Silva',
+      telefone: '67999359933',
+    }) as { confirmacao_pendente: boolean };
+
+    expect(r.confirmacao_pendente).toBe(true);
+
+    const total = db.prepare('SELECT COUNT(*) AS t FROM appointments').get() as { t: number };
+    expect(total.t).toBe(0);
+  });
+
   it('IGNORA o contato que o modelo escrever e usa o do servidor', () => {
     rodar('criar_agendamento', {
+      ...MARCACAO,
       inicio: `${SEGUNDA} 09:00`,
-      nome: 'Maria',
       contatoId: 'contato-de-outra-pessoa',
       contact_id: 'contato-de-outra-pessoa',
     });
@@ -167,7 +242,7 @@ describe('marcar', () => {
   it('explica a recusa em vez de lançar', () => {
     marcarPara('contato-joao', `${SEGUNDA} 09:00`);
 
-    const r = rodar('criar_agendamento', { inicio: `${SEGUNDA} 09:00`, nome: 'Maria' });
+    const r = rodar('criar_agendamento', { ...MARCACAO, inicio: `${SEGUNDA} 09:00` });
 
     expect(r.ok).toBe(false);
     expect(r.motivo).toBe('conflito');
@@ -175,7 +250,7 @@ describe('marcar', () => {
   });
 
   it('devolve erro legível quando o horário não existe na grade', () => {
-    const r = rodar('criar_agendamento', { inicio: `${SEGUNDA} 03:00`, nome: 'Maria' });
+    const r = rodar('criar_agendamento', { ...MARCACAO, inicio: `${SEGUNDA} 03:00` });
     expect(r.motivo).toBe('fora_do_horario');
   });
 });
@@ -255,7 +330,7 @@ describe('modo de avaliação (semPersistir)', () => {
   const seco = () => contexto({ semPersistir: true });
 
   it('não grava agendamento nenhum', () => {
-    const r = rodar('criar_agendamento', { inicio: `${SEGUNDA} 09:00`, nome: 'Maria' }, seco());
+    const r = rodar('criar_agendamento', { ...MARCACAO, inicio: `${SEGUNDA} 09:00` }, seco());
 
     expect(r.simulado).toBe(true);
     const total = db.prepare('SELECT COUNT(*) AS t FROM appointments').get() as { t: number };
@@ -343,6 +418,36 @@ describe('o laço de ferramentas no motor', () => {
 
     // Duas chamadas de 50 tokens de entrada cada.
     expect(r.uso.tokensEntrada).toBe(100);
+  });
+
+  it('grava que a resposta veio da FERRAMENTA, e não dos documentos', async () => {
+    // A auditoria de conversa precisa distinguir as duas coisas. Sem isto ela
+    // cobra score de busca de uma resposta que saiu da agenda — e foi o que
+    // aconteceu numa conversa real: três acusações, e nas três o dado da
+    // ferramenta estava certo.
+    semearComChunk();
+    const comFerramenta = new Motor({
+      db,
+      embedder: new EmbedderFake(),
+      llm: new LlmComFerramentas([chamada('meus_agendamentos', {}), undefined]),
+    });
+
+    const r = await comFerramenta.responder('c', 'contato-1', 'tenho consulta marcada?', {
+      canal: 'web',
+    });
+
+    const daFerramenta = mensagensApos(db, r.conversaId as number, 0);
+    expect(daFerramenta.at(-1)?.usouFerramenta).toBe(true);
+
+    // E a resposta que não consultou nada continua marcada como documento.
+    const semFerramenta = new Motor({
+      db,
+      embedder: new EmbedderFake(),
+      llm: new LlmComFerramentas([undefined]),
+    });
+
+    const s = await semFerramenta.responder('c', 'contato-2', 'quanto custa?', { canal: 'web' });
+    expect(mensagensApos(db, s.conversaId as number, 0).at(-1)?.usouFerramenta).toBe(false);
   });
 
   it('manda a data de hoje no prompt, junto com as regras de agenda', async () => {

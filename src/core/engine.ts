@@ -322,6 +322,7 @@ export class Motor {
         custoUsd: custo,
         latenciaMs,
         fontes,
+        usouFerramenta: resposta.usouFerramenta,
       });
 
       if (desistiu) {
@@ -365,7 +366,7 @@ export class Motor {
     mensagem: string;
     historico: TurnoDaConversa[];
     ferramentas?: ContextoDasFerramentas;
-  }): Promise<RespostaDoLlm> {
+  }): Promise<RespostaDoLlm & { usouFerramenta: boolean }> {
     const opcoes = p.ferramentas ? { ferramentas: FERRAMENTAS_DA_AGENDA } : {};
 
     let resposta = await this.llm.responder(p.promptDoSistema, p.mensagem, p.historico, opcoes);
@@ -398,7 +399,11 @@ export class Motor {
       volta += 1;
     }
 
-    return { texto: resposta.texto, tokensEntrada, tokensSaida };
+    // `turnos` vazio quer dizer que o modelo respondeu direto, sem consultar
+    // nada. Quem grava a mensagem usa isto para registrar de onde veio a
+    // resposta — a auditoria de conversa não pode cobrar score de busca de uma
+    // resposta que saiu da agenda.
+    return { texto: resposta.texto, tokensEntrada, tokensSaida, usouFerramenta: turnos.length > 0 };
   }
 
   /**

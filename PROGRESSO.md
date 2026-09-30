@@ -40,7 +40,7 @@ Comandos de qualidade:
 | Comando | O que faz | Custo |
 |---|---|---|
 | `npm run novo-tenant -- <slug> "<Nome>"` | cria a pasta de um cliente novo com modelos | zero |
-| `npm test` | 378 testes unitários, offline | zero |
+| `npm test` | 386 testes unitários, offline | zero |
 | `npm run typecheck` | checagem de tipos | zero |
 | `npm run calibrar -- <slug>` | mede scores de busca para ajustar o limiar | ~US$ 0,000005 |
 | `npm run avaliar -- <slug>` | 28 perguntas contra a API real, gera logs | ~US$ 0,01 |
@@ -129,7 +129,7 @@ Estado de conversa, handoff persistido, contabilidade e política de testes.
 **Dois tipos, separados de propósito.** Juntos os dois pioram: o determinístico
 fica lento e caro, o não-determinístico some no ruído.
 
-**`npm test`** — 378 testes unitários, offline, grátis, ~5s. Rode a cada
+**`npm test`** — 386 testes unitários, offline, grátis, ~5s. Rode a cada
 salvamento. Embedder e LLM são sempre dublês; **nenhum teste unitário toca a
 rede**. Um teste só entra se falha por *um* motivo nomeável, se o nome descreve
 comportamento (não implementação), e — quando nasce de bug real — traz comentário
@@ -952,6 +952,70 @@ propósito porque avaliação é pergunta sintética; transcrito de conversa tem
 e telefone, e com cliente real virar commit é problema de LGPD. A rota
 `/api/conversa` também passou a filtrar por tenant e devolver 404 — sem isso,
 trocar o número na URL lia o atendimento de outra clínica.
+
+---
+
+## Marcar também precisa de contrato (2026-09-30)
+
+Uma conversa real marcou uma consulta **sem telefone e sem confirmar**. O bot não
+desobedeceu nada: `criar_agendamento` pedia `['inicio', 'nome']` e não tinha
+`confirmado`, e a regra A2 dizia "telefone e convênio, se a pessoa tiver". Ele fez
+exatamente o combinado. **O combinado é que estava errado.**
+
+A clínica ficou com uma consulta marcada e nenhum jeito de avisar a pessoa se
+precisasse desmarcar.
+
+### O que mudou
+
+`criar_agendamento` agora exige `telefone` e `confirmado`, como alterar e
+cancelar já exigiam. Confirmado ausente vale como `false`: o silêncio erra para
+o lado seguro.
+
+**`required` no schema não basta.** Campo obrigatório de texto aceita "não
+informado" — treze caracteres e nenhum telefone dentro —, e o modelo preencheria
+para poder chamar. Quem barra é uma checagem que conta DÍGITO: de 10 a 15, o que
+aceita "+55 (67) 99935-9933" e recusa "a combinar".
+
+A regra A2 do prompt foi junto, mas ela é a parte fraca: prompt pede, assinatura
+obriga.
+
+### A avaliação paga NÃO precisou ser refeita
+
+As regras de agenda só entram no prompt quando há ferramenta, e `npm run avaliar`
+roda sem conversa — logo sem ferramenta. Há teste afirmando isso. O prompt que a
+suíte mede não mudou.
+
+---
+
+## A auditoria também erra, e a conversa real mostrou onde (2026-09-30)
+
+Dois falsos positivos apareceram na primeira conversa depois que a auditoria
+ficou pronta. Ambos foram corrigidos com teste.
+
+### `"boa boa"` virou o nome do cliente
+
+Duas palavras, só letras: forma de nome. Foi contado como o nome na primeira
+mensagem da conversa, e os dois pedidos seguintes viraram "pediu o nome, que a
+conversa já tinha" — acusação inventada.
+
+**Nome não tem formato que o separe de uma frase curta qualquer. O que separa é
+vir DEPOIS de alguém perguntar.** Agora só conta como nome o que chega depois de
+o bot pedir. Telefone, data e hora continuam valendo a qualquer momento, porque
+têm formato próprio e o cliente pode dizer "quero dia 8 às 9" sem ninguém pedir.
+
+### O score da busca não se aplica a resposta de ferramenta
+
+"Na próxima quinta (08/10) tenho horários às 08:00..." saiu da agenda, com
+autoridade total, e o melhor chunk recuperado marcava 0.391. O relatório acusou
+`afirmou_com_contexto_fraco` três vezes, e nas três o dado estava certo.
+
+A auditoria não tinha como saber de onde veio a resposta. Migration `005`:
+`messages.used_tool`. O motor já sabia — `conversarComFerramentas` conta as
+voltas — e só não estava contando a ninguém.
+
+**Mensagem gravada antes da migration continua sem a informação**, e por isso a
+conversa 23 ainda mostra os três achados. Não dá para saber retroativamente, e
+inventar o valor seria pior que o falso positivo.
 
 ---
 
