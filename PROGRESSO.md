@@ -40,7 +40,7 @@ Comandos de qualidade:
 | Comando | O que faz | Custo |
 |---|---|---|
 | `npm run novo-tenant -- <slug> "<Nome>"` | cria a pasta de um cliente novo com modelos | zero |
-| `npm test` | 386 testes unitários, offline | zero |
+| `npm test` | 403 testes unitários, offline | zero |
 | `npm run typecheck` | checagem de tipos | zero |
 | `npm run calibrar -- <slug>` | mede scores de busca para ajustar o limiar | ~US$ 0,000005 |
 | `npm run avaliar -- <slug>` | 28 perguntas contra a API real, gera logs | ~US$ 0,01 |
@@ -129,7 +129,7 @@ Estado de conversa, handoff persistido, contabilidade e política de testes.
 **Dois tipos, separados de propósito.** Juntos os dois pioram: o determinístico
 fica lento e caro, o não-determinístico some no ruído.
 
-**`npm test`** — 386 testes unitários, offline, grátis, ~5s. Rode a cada
+**`npm test`** — 403 testes unitários, offline, grátis, ~5s. Rode a cada
 salvamento. Embedder e LLM são sempre dublês; **nenhum teste unitário toca a
 rede**. Um teste só entra se falha por *um* motivo nomeável, se o nome descreve
 comportamento (não implementação), e — quando nasce de bug real — traz comentário
@@ -1016,6 +1016,78 @@ voltas — e só não estava contando a ninguém.
 **Mensagem gravada antes da migration continua sem a informação**, e por isso a
 conversa 23 ainda mostra os três achados. Não dá para saber retroativamente, e
 inventar o valor seria pior que o falso positivo.
+
+---
+
+## Mensagens seguidas viram um turno só (2026-09-30)
+
+Ninguém escreve um parágrafo no WhatsApp. Escreve "quero marcar", depois "pra
+sexta", depois "as 9" — e o bot respondia três vezes a um pedido só. Foi o que
+aconteceu nas conversas 22 e 23.
+
+Agora o servidor espera 2,5s de silêncio antes de responder, e o contador
+**reinicia a cada mensagem nova**.
+
+### Por que NÃO foi pelo sinal de digitação
+
+A pergunta certa veio antes do código: dá para esperar o cliente parar de
+digitar? Pesquisado na documentação da Meta: **não**.
+
+- O indicador de digitação da Cloud API é **mão única** — do negócio para o
+  cliente. Some quando você responde ou em 25s.
+- A lista de webhooks (`messages`, `statuses`, `account_update`, …) não tem
+  evento de presença. `statuses` engana pelo nome: fala só das mensagens de
+  SAÍDA (sent/delivered/read).
+- Quem tem o sinal são as bibliotecas não-oficiais (Baileys e afins), via
+  `presence.update` com `composing`. Elas violam os Termos e arriscam banir o
+  número — inaceitável para o número de uma clínica.
+
+Sobra o único sinal que existe: **mensagem chegando**. Está registrado aqui
+porque é a pergunta que qualquer um vai refazer, e a resposta custou pesquisa.
+
+### O que segura o recurso
+
+`src/core/conversation/agrupador.ts`, no core e não no adaptador: como várias
+mensagens viram um turno é decisão de negócio, e o adaptador de WhatsApp vai
+usar este mesmo código. Lá ele não poderá segurar a requisição — webhook
+precisa devolver 200 na hora —, então chamará `receber` sem await e mandará a
+resposta depois.
+
+Três detalhes que não são óbvios:
+
+1. **A requisição absorvida responde na hora**, com `{ agrupada: true }`, em vez
+   de esperar o turno fechar. Do outro lado há uma conexão HTTP aberta.
+2. **Teto de espera** (`esperaMaximaMs`, 12s). Sem ele, quem digita sem parar
+   empurraria o prazo para frente e nunca receberia resposta.
+3. **A chave do lote inclui o tenant.** Dois clientes podem ter o mesmo id de
+   contato, e sem isso conversariam na mesma caixa.
+
+### O primeiro estado em memória do servidor
+
+Até aqui o servidor era stateless: nenhum `setTimeout`, nenhum `Map` de módulo,
+todo estado no SQLite. Este é o primeiro — e por isso o encerramento
+(`SIGINT`/`SIGTERM` em `server.ts`) passou a chamar `agrupador.encerrar()`.
+Timer pendente segura o processo vivo.
+
+`encerrar()` resolve com `undefined`, não com o texto: o processo está caindo, e
+mandar responder faria o motor escrever num banco que está fechando.
+
+### A página precisou mudar antes de tudo
+
+`chat.html` **desabilitava o input** enquanto esperava a resposta. Com isso o
+cliente não conseguia mandar a segunda mensagem, e o agrupamento nunca teria o
+que agrupar. Era o bloqueio real do recurso, e só apareceu ao mapear o caminho
+da mensagem antes de codar.
+
+Junto: um indicador "digitando…" para a conversa, não um por envio — três envios
+empilhavam três na tela para uma resposta só.
+
+### O que NÃO mudou
+
+`Motor` não foi tocado. O CLI é sequencial (`for await` por linha) e não
+participa. A suíte de avaliação chama `motor.responder()` direto, com
+`semPersistir` — o agrupador não entra no caminho e **nenhum prompt mudou**,
+então a medição paga continua valendo.
 
 ---
 

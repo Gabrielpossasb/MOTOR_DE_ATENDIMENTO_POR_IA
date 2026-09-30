@@ -20,6 +20,7 @@ import { montarPainel } from '../../core/painel/painel-service.js';
 import { marcarHandoffRevisado } from '../../storage/repositories/handoffs.js';
 import { ultimasMensagens } from '../../storage/repositories/messages.js';
 import { encerrarConversa } from '../../core/conversation/conversation-service.js';
+import { AgrupadorDeMensagens } from '../../core/conversation/agrupador.js';
 import {
   auditarConversa,
   type ConversaParaAuditar,
@@ -62,6 +63,12 @@ export interface ContextoWeb {
   motor: Motor;
   db: Db;
   slug: string;
+  /**
+   * Junta mensagens seguidas num turno só. Ausente = uma resposta por
+   * mensagem, o comportamento anterior — é assim que os testes que não
+   * tratam de agrupamento continuam simples.
+   */
+  agrupador?: AgrupadorDeMensagens;
 }
 
 export function criarServidor(ctx: ContextoWeb): http.Server {
@@ -91,7 +98,26 @@ export async function tratar(
       return;
     }
 
-    responderJson(res, 200, await ctx.motor.responder(ctx.slug, contatoId, texto, { canal: 'web' }));
+    // Espera um instante por mais mensagens do mesmo contato, e responde uma
+    // vez só. Um juntado ausente quer dizer que esta mensagem foi absorvida por uma
+    // posterior: a resposta virá na requisição dela, e esta não desenha nada.
+    let mensagem = texto;
+
+    if (ctx.agrupador) {
+      const juntado = await ctx.agrupador.receber(
+        AgrupadorDeMensagens.chave(ctx.slug, contatoId),
+        texto,
+      );
+
+      if (juntado === undefined) {
+        responderJson(res, 200, { agrupada: true });
+        return;
+      }
+
+      mensagem = juntado;
+    }
+
+    responderJson(res, 200, await ctx.motor.responder(ctx.slug, contatoId, mensagem, { canal: 'web' }));
     return;
   }
 

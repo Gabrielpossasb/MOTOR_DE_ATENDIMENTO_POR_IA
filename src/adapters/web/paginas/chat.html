@@ -299,14 +299,35 @@
         return fontes ? fontes + '\n' + numeros : numeros;
       }
 
-      async function enviar(texto) {
-        adicionarBalao(texto, 'cliente');
+      /**
+       * Um indicador de "digitando…" para a conversa inteira, e não um por
+       * mensagem enviada.
+       *
+       * Desde que o servidor agrupa mensagens seguidas, três envios rápidos
+       * ficam em voo ao mesmo tempo. Um indicador por envio empilharia três
+       * na tela para uma resposta só.
+       */
+      let emVoo = 0;
+
+      function mostrarDigitando() {
+        emVoo += 1;
+        if (document.querySelector('.digitando')) return;
 
         const digitando = document.createElement('div');
         digitando.className = 'digitando';
         digitando.textContent = 'digitando…';
         elMensagens.appendChild(digitando);
         rolarParaOFim();
+      }
+
+      function esconderDigitando() {
+        emVoo = Math.max(0, emVoo - 1);
+        if (emVoo === 0) document.querySelector('.digitando')?.remove();
+      }
+
+      async function enviar(texto) {
+        adicionarBalao(texto, 'cliente');
+        mostrarDigitando();
 
         try {
           const resposta = await fetch('/api/mensagem', {
@@ -316,7 +337,15 @@
           });
 
           const dados = await resposta.json();
-          digitando.remove();
+
+          // Esta mensagem foi absorvida por uma posterior: a resposta vem na
+          // requisição dela. Não desenha nada, e o indicador continua de pé.
+          if (dados.agrupada) {
+            esconderDigitando();
+            return;
+          }
+
+          esconderDigitando();
 
           if (!resposta.ok) {
             adicionarAviso('Erro: ' + (dados.erro || resposta.status));
@@ -339,24 +368,23 @@
 
           adicionarAcoes(dados.acoes);
         } catch (erro) {
-          digitando.remove();
+          esconderDigitando();
           adicionarAviso('Falha de rede: ' + erro.message);
         }
       }
 
-      elFormulario.addEventListener('submit', async (evento) => {
+      elFormulario.addEventListener('submit', (evento) => {
         evento.preventDefault();
         const texto = elEntrada.value.trim();
         if (texto.length === 0) return;
 
         elEntrada.value = '';
-        elEntrada.disabled = true;
-        elEnviar.disabled = true;
 
-        await enviar(texto);
-
-        elEntrada.disabled = false;
-        elEnviar.disabled = false;
+        // O campo NÃO é desabilitado enquanto espera, de propósito: é isso
+        // que permite mandar a segunda e a terceira mensagem do mesmo
+        // raciocínio. Sem isto o agrupamento do servidor nunca teria o que
+        // agrupar.
+        enviar(texto);
         elEntrada.focus();
       });
 

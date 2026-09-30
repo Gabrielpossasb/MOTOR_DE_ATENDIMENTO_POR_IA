@@ -14,6 +14,7 @@ import { LlmOpenAI } from '../../core/llm/client.js';
 import { carregarTenant } from '../../core/tenant/tenant-service.js';
 import { contarChunks } from '../../storage/repositories/chunks.js';
 import { criarServidor } from './rotas.js';
+import { AgrupadorDeMensagens } from '../../core/conversation/agrupador.js';
 
 function principal(): void {
   const slug = process.argv[2];
@@ -32,7 +33,17 @@ function principal(): void {
   }
 
   const motor = new Motor({ db, embedder: new EmbedderOpenAI(), llm: new LlmOpenAI() });
-  const servidor = criarServidor({ motor, db, slug });
+
+  // Primeiro estado em memória que este servidor tem. Por isso o encerramento
+  // abaixo precisa limpá-lo: timer pendente segura o processo vivo.
+  const agrupador = config.conversa.agrupamento.ativo
+    ? new AgrupadorDeMensagens({
+        esperaMs: config.conversa.agrupamento.esperaMs,
+        esperaMaximaMs: config.conversa.agrupamento.esperaMaximaMs,
+      })
+    : undefined;
+
+  const servidor = criarServidor({ motor, db, slug, ...(agrupador ? { agrupador } : {}) });
 
   servidor.listen(config.web.porta, () => {
     console.log(`\n${tenant.nome}`);
@@ -44,6 +55,7 @@ function principal(): void {
   });
 
   const encerrar = () => {
+    agrupador?.encerrar();
     servidor.close(() => {
       db.close();
       process.exit(0);

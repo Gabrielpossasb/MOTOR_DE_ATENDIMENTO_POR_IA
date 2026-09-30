@@ -240,7 +240,11 @@ Estão em `src/core/llm/prompts.ts` e valem para todo tenant:
    repete os dados antes de gravar. Os três estão na assinatura da ferramenta,
    não no prompt — e o telefone é conferido por contagem de dígitos, porque
    campo obrigatório de texto aceita "não informado".
-10. Não tenta vender nem processar pagamento.
+10. **Espera 2,5s antes de responder**, e junta as mensagens que chegarem
+    nesse intervalo num turno só. Ninguém escreve um parágrafo no WhatsApp:
+    escreve "quero marcar", "pra sexta", "as 9". O contador reinicia a cada
+    mensagem nova, com teto de 12s.
+11. Não tenta vender nem processar pagamento.
 
 Não são regras estéticas: no WhatsApp cada mensagem enviada tem custo, então
 verbosidade vira prejuízo.
@@ -376,7 +380,7 @@ avaliação com logs e medição de estabilidade, e a **agenda completa** — a
 recepção opera pela página, o bot marca, remarca e cancela por tool calling, e o
 lembrete do dia sai pelo `outbox`.
 
-386 testes unitários offline. Última medição de acurácia: **100% de acurácia e
+403 testes unitários offline. Última medição de acurácia: **100% de acurácia e
 100% de estabilidade** em 5 rodadas consecutivas — medido antes das mudanças de
 prompt da agenda, então precisa ser refeito.
 

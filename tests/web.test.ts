@@ -16,8 +16,10 @@ import { criarServidor } from '../src/adapters/web/rotas.js';
 import type { RespostaDoBot } from '../src/core/types.js';
 import type { PainelDoTenant } from '../src/core/painel/painel-service.js';
 import type { MensagemGravada } from '../src/storage/repositories/messages.js';
-import { obterOuCriarConversa } from '../src/storage/repositories/conversations.js';
+import { conversaAtiva, obterOuCriarConversa } from '../src/storage/repositories/conversations.js';
 import type { RelatorioDeConversa } from '../src/core/conversation/auditoria.js';
+import { AgrupadorDeMensagens } from '../src/core/conversation/agrupador.js';
+import { mensagensApos } from '../src/storage/repositories/messages.js';
 import type { RegistroDeAvaliacao } from '../src/core/avaliacao/log.js';
 import { EmbedderFake, vetorDeTexto } from './helpers/fake-embedder.js';
 import { LlmQueDesiste } from './helpers/fake-llm.js';
@@ -541,5 +543,89 @@ describe('arquivos estáticos', () => {
       expect(corpo).not.toContain('OPENAI_API_KEY');
       expect(corpo).not.toContain('"dependencies"');
     }
+  });
+});
+
+describe('agrupamento de mensagens seguidas', () => {
+  // Um servidor à parte, com agrupador e espera curta. Os outros testes
+  // sobem sem agrupador de propósito: uma resposta por mensagem mantém
+  // simples tudo que não trata deste assunto.
+  let comAgrupador: Server;
+  let baseAgrupada: string;
+  let agrupador: AgrupadorDeMensagens;
+
+  beforeEach(async () => {
+    agrupador = new AgrupadorDeMensagens({ esperaMs: 60, esperaMaximaMs: 400 });
+    const motor = new Motor({ db, embedder: new EmbedderFake(), llm: new LlmQueDesiste() });
+    comAgrupador = criarServidor({ motor, db, slug: SLUG, agrupador });
+
+    await new Promise<void>((resolve) => comAgrupador.listen(0, '127.0.0.1', resolve));
+    baseAgrupada = `http://127.0.0.1:${(comAgrupador.address() as AddressInfo).port}`;
+  });
+
+  afterEach(async () => {
+    agrupador.encerrar();
+    await new Promise<void>((resolve) => comAgrupador.close(() => resolve()));
+  });
+
+  function mandarAgrupada(texto: string, contatoId = 'contato-junto'): Promise<Response> {
+    return fetch(`${baseAgrupada}/api/mensagem`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ contatoId, texto }),
+    });
+  }
+
+  it('três mensagens seguidas viram UMA resposta', async () => {
+    // O caso real: o cliente escreveu o pedido em três mensagens e levou três
+    // respostas, uma para cada pedaço.
+    const respostas = await Promise.all([
+      mandarAgrupada(PERGUNTA_BOA),
+      mandarAgrupada('pra sexta'),
+      mandarAgrupada('as 9'),
+    ]);
+
+    const corpos = await Promise.all(respostas.map((r) => corpo<Record<string, unknown>>(r)));
+    const agrupadas = corpos.filter((c) => c.agrupada === true);
+    const respondidas = corpos.filter((c) => c.agrupada !== true);
+
+    expect(agrupadas).toHaveLength(2);
+    expect(respondidas).toHaveLength(1);
+  });
+
+  it('grava UM par user/assistant, com os três pedaços na linha do cliente', async () => {
+    await Promise.all([
+      mandarAgrupada(PERGUNTA_BOA),
+      mandarAgrupada('pra sexta'),
+      mandarAgrupada('as 9'),
+    ]);
+
+    const conversa = conversaAtiva(db, 1, 'contato-junto');
+    const mensagens = mensagensApos(db, conversa?.id ?? 0, 0);
+
+    expect(mensagens).toHaveLength(2);
+    expect(mensagens[0]?.papel).toBe('user');
+    expect(mensagens[0]?.conteudo).toBe(`${PERGUNTA_BOA}
+pra sexta
+as 9`);
+    expect(mensagens[1]?.papel).toBe('assistant');
+  });
+
+  it('mensagem isolada continua respondida normalmente', async () => {
+    const dados = await corpo<RespostaDoBot>(await mandarAgrupada(PERGUNTA_BOA));
+
+    expect(dados.texto.length).toBeGreaterThan(0);
+    expect(dados.conversaId).toBeDefined();
+  });
+
+  it('continua recusando corpo inválido antes de agrupar', async () => {
+    // A validação vem primeiro: mensagem vazia não pode nem abrir um lote.
+    const resposta = await fetch(`${baseAgrupada}/api/mensagem`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ contatoId: 'c', texto: '   ' }),
+    });
+
+    expect(resposta.status).toBe(400);
   });
 });

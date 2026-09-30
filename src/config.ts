@@ -183,6 +183,28 @@ export const config = {
      */
     mensagensNaJanela: 8,
     /**
+     * Agrupar mensagens seguidas do cliente num turno só.
+     *
+     * Ninguém escreve um parágrafo no WhatsApp: escreve "quero marcar", depois
+     * "pra sexta", depois "as 9". Sem isto o bot responde três vezes a um
+     * pedido só, e paga três chamadas ao modelo por ele.
+     *
+     * Esperar o cliente parar de digitar seria melhor e NÃO é possível: no
+     * WhatsApp oficial o indicador de digitação só vai do negócio para o
+     * cliente, e nenhum webhook carrega presença. Então o contador reinicia a
+     * cada mensagem que chega, que é o único sinal que existe.
+     */
+    agrupamento: {
+      ativo: true,
+      /** Silêncio necessário para fechar o turno. Reinicia a cada mensagem. */
+      esperaMs: 2500,
+      /**
+       * Teto desde a primeira mensagem do lote. Sem ele, quem digita sem
+       * parar nunca receberia resposta.
+       */
+      esperaMaximaMs: 12000,
+    },
+    /**
      * Conversa passada a um humano não volta a ser respondida pelo bot.
      * Deixar o bot continuar atropelaria o atendente no meio do atendimento.
      */

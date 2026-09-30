@@ -3,8 +3,8 @@
 Arquivo de handoff entre sessões. O `PROGRESSO.md` conta o que o projeto **é**;
 este conta o que está **em andamento agora**.
 
-**Última sessão:** 2026-09-29
-**Estado:** suíte **verde** — 386 testes offline, typecheck limpo, e a suíte paga
+**Última sessão:** 2026-09-30
+**Estado:** suíte **verde** — 403 testes offline, typecheck limpo, e a suíte paga
 em **100% de acurácia e 100% de estabilidade** (5 rodadas, 28 perguntas).
 **Branch:** `conversa-natural`, à frente de `main`.
 **Próximo:** a coleta de dados repetida na conversa (ver a seção da conversa real
@@ -113,6 +113,34 @@ relatório abre no `/painel` clicando numa linha. Detalhe em `PROGRESSO.md`,
 É o número que diz se a próxima mexida no prompt resolveu: hoje 64%, e o alvo é
 não ter `pedido_repetido` nenhum. **Medir antes e depois na mesma conversa não
 custa nada** — a auditoria não chama a API.
+
+---
+
+## A CHAVE DA OPENAI ESTÁ INVALIDADA (2026-09-30)
+
+Qualquer chamada paga devolve `401 Your API key has been invalidated`. É a
+chave que o `PROGRESSO.md` já recomendava rotacionar — ela foi colada uma vez
+no `.env.example`, que é versionado.
+
+**Nada roda contra a API real até trocar `OPENAI_API_KEY` no `.env`.** A suíte
+offline (403 testes) não depende disso e continua verde.
+
+---
+
+## Agrupamento de mensagens (2026-09-30)
+
+Mensagens seguidas do mesmo cliente viram um turno só: 2,5s de silêncio, com o
+contador reiniciando a cada mensagem. Detalhe em `PROGRESSO.md`, "Mensagens
+seguidas viram um turno só" — inclusive **por que não dá para usar o sinal de
+digitação do WhatsApp**, que é a pergunta que vai voltar.
+
+Verificado sobre HTTP real: duas mensagens responderam `{agrupada:true}` na
+hora e só a terceira levou o turno ao motor. Na página, o input **continua
+habilitado** (antes travava, e era isso que impedia o recurso) e aparece um
+único "digitando…".
+
+**Falta medir com a API real**, por causa da chave: confirmar que três
+mensagens agrupadas custam cerca de um terço de três separadas.
 
 ---
 
