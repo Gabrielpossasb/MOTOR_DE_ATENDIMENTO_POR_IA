@@ -4,7 +4,7 @@ Arquivo de handoff entre sessões. O `PROGRESSO.md` conta o que o projeto **é**
 este conta o que está **em andamento agora**.
 
 **Última sessão:** 2026-09-30
-**Estado:** suíte **verde** — 405 testes offline, typecheck limpo, e a suíte paga
+**Estado:** suíte **verde** — 423 testes offline, typecheck limpo, e a suíte paga
 em **100% de acurácia e 100% de estabilidade** (5 rodadas, 28 perguntas).
 **Branch:** `conversa-natural`, à frente de `main`.
 **Próximo:** a coleta de dados repetida na conversa (ver a seção da conversa real

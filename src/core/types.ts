@@ -5,11 +5,22 @@
  * devolve texto. Quem sabe de canal são os adaptadores em src/adapters/.
  */
 
+import type { RegraDeAlerta } from './alertas/alertas.js';
+
 /** Ajustes por cliente que sobrescrevem os defaults de config.ts. */
 export interface ConfigDoTenant {
   topK?: number;
   limiarDeConfianca?: number;
   agenda?: ConfigDaAgenda;
+  /**
+   * Palavras que acionam o responsável sozinhas, sem depender do modelo.
+   *
+   * É a rede determinística: o modelo pega o pedido torto ("dá pra fazer mais
+   * barato?") e pode esquecer de chamar a ferramenta; a lista nunca esquece.
+   * Enquanto o negócio está sendo calibrado, perder um pedido de desconto é
+   * perder venda.
+   */
+  alertas?: RegraDeAlerta[];
 }
 
 /**

@@ -107,6 +107,7 @@
         color: #555;
       }
 
+      .resolver,
       .revisar {
         font: inherit;
         font-size: 12px;
@@ -255,6 +256,9 @@
     <div class="conteudo">
       <div class="cartoes" id="cartoes"></div>
 
+      <h2>Avisos para voce</h2>
+      <div id="alertas"></div>
+
       <h2>Handoffs para revisar</h2>
       <div id="handoffs"></div>
 
@@ -329,6 +333,7 @@
           cartao('Mensagens', p.mensagens.total, p.mensagens.doBot + ' do bot · ' + p.mensagens.latenciaMediaMs + 'ms em média'),
           cartao('Sem resposta', p.perguntasSemResposta.length, 'buracos na base de conhecimento'),
           cartao('Lembretes na fila', p.lembretesPendentes.length, 'esperando o comando de envio'),
+          cartao('Avisos para voce', p.alertasPendentes.length, 'decisoes esperando voce'),
         ].join('');
 
         // Handoffs pendentes: a fila do colaborador. "bot voltou" quer dizer
@@ -367,6 +372,47 @@
           botao.addEventListener('click', async () => {
             botao.disabled = true;
             await fetch('/api/handoff/revisar', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ id: Number(botao.dataset.id) }),
+            });
+            atualizar();
+          });
+        }
+
+        // Avisos: decisoes que o bot nao pode tomar sozinho. Diferente do
+        // handoff, o bot CONTINUOU conversando -- isto aqui e tarefa, nao
+        // atendimento parado.
+        const alertas = p.alertasPendentes;
+        document.getElementById('alertas').innerHTML =
+          alertas.length === 0
+            ? '<div class="vazio">Nenhum aviso esperando voce.</div>'
+            : '<table><thead><tr><th>Assunto</th><th>O que decidir</th>' +
+              '<th>Mensagem do cliente</th><th>Veio de</th><th>Quando</th><th></th></tr></thead><tbody>' +
+              alertas
+                .map(
+                  (a) =>
+                    '<tr><td><span class="etiqueta handoff">' +
+                    escapar(a.tipo) +
+                    '</span></td><td>' +
+                    escapar(a.detalhe) +
+                    '</td><td class="truncar">' +
+                    escapar(a.mensagemDoCliente || '-') +
+                    '</td><td>' +
+                    escapar(a.origem) +
+                    '</td><td>' +
+                    a.criadoEm +
+                    '</td><td><button class="resolver" data-id="' +
+                    a.id +
+                    '">Resolvido</button></td></tr>',
+                )
+                .join('') +
+              '</tbody></table>';
+
+        for (const botao of document.querySelectorAll('.resolver')) {
+          botao.addEventListener('click', async () => {
+            botao.disabled = true;
+            await fetch('/api/alerta/resolver', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ id: Number(botao.dataset.id) }),

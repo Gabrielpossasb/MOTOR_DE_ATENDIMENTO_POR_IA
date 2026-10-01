@@ -18,6 +18,7 @@ import type { Db } from '../../storage/db.js';
 import type { Motor } from '../../core/engine.js';
 import { montarPainel } from '../../core/painel/painel-service.js';
 import { marcarHandoffRevisado } from '../../storage/repositories/handoffs.js';
+import { marcarAlertaResolvido } from '../../core/alertas/alertas.js';
 import { ultimasMensagens } from '../../storage/repositories/messages.js';
 import { encerrarConversa } from '../../core/conversation/conversation-service.js';
 import { AgrupadorDeMensagens } from '../../core/conversation/agrupador.js';
@@ -154,6 +155,20 @@ export async function tratar(
 
     const tenant = carregarTenant(ctx.db, ctx.slug);
     responderJson(res, 200, { revisado: marcarHandoffRevisado(ctx.db, tenant.id, id) });
+    return;
+  }
+
+  if (req.method === 'POST' && rota === '/api/alerta/resolver') {
+    const corpo = await lerCorpo(req);
+    const id = Number(corpo.id);
+
+    if (!Number.isInteger(id) || id <= 0) {
+      responderJson(res, 400, { erro: 'Informe o id do aviso.' });
+      return;
+    }
+
+    const tenant = carregarTenant(ctx.db, ctx.slug);
+    responderJson(res, 200, { resolvido: marcarAlertaResolvido(ctx.db, tenant.id, id) });
     return;
   }
 

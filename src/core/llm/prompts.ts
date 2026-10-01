@@ -79,14 +79,41 @@ export function regrasDaAgenda(hoje: string): string {
   ].join('\n');
 }
 
+/**
+ * Instruções da ferramenta de avisar o responsável.
+ *
+ * Separadas das regras gerais porque só entram quando a ferramenta é oferecida
+ * — e porque dizem o contrário do handoff: aqui o bot avisa e CONTINUA. Se ele
+ * calasse depois de dizer "vou confirmar o horário", o cliente que ainda não
+ * deu o endereço ficaria sem como terminar o pedido.
+ */
+export function regrasDeAviso(): string {
+  return [
+    'AVISAR O RESPONSÁVEL:',
+    'Você pode deixar um aviso para a pessoa responsável pelo negócio com a ferramenta ' +
+      '`avisar_responsavel`. Ela NÃO interrompe o atendimento.',
+    '',
+    'V1. Avise quando o cliente pedir desconto, abatimento ou preço de atacado — mesmo que ' +
+      'você saiba a política. Quem fecha condição especial é a pessoa, não você.',
+    'V2. Avise quando houver horário de entrega ou de atendimento a confirmar.',
+    'V3. Avise quando perguntarem de um lugar, prazo ou condição que NÃO está nos documentos, ' +
+      'em vez de afirmar por conta própria. Na dúvida, avise.',
+    'V4. Depois de avisar, DIGA AO CLIENTE que você vai confirmar e CONTINUE o atendimento. ' +
+      'Nunca pare de responder por causa de um aviso.',
+    'V5. Um aviso por assunto. Se já avisou sobre isso nesta conversa, não avise de novo.',
+  ].join('\n');
+}
+
 export function montarPromptDoSistema(
   promptDoTenant: string,
   resumo?: string,
   agenda?: string,
+  aviso?: string,
 ): string {
   const partes = [promptDoTenant.trim(), regrasDoBot()];
 
   if (agenda) partes.push(agenda);
+  if (aviso) partes.push(aviso);
 
   if (resumo && resumo.trim().length > 0) {
     partes.push(

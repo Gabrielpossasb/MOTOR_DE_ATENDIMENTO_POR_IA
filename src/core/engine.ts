@@ -10,7 +10,9 @@ import { config } from '../config.js';
 import type { Db } from '../storage/db.js';
 import type { LlmClient } from './llm/client.js';
 import { custoDaResposta } from './llm/client.js';
-import type { RespostaDoLlm, TurnoDeFerramenta } from './llm/client.js';
+import type { Ferramenta, RespostaDoLlm, TurnoDeFerramenta } from './llm/client.js';
+import { FERRAMENTA_DE_AVISO, executarAviso } from './alertas/ferramenta.js';
+import { alertasDaMensagem, registrarAlerta } from './alertas/alertas.js';
 import { AGENDA_PADRAO } from './agenda/disponibilidade.js';
 import {
   executarFerramenta,
@@ -23,6 +25,7 @@ import {
   montarPromptDoSistema,
   montarPromptSocial,
   regrasDaAgenda,
+  regrasDeAviso,
 } from './llm/prompts.js';
 import { normalizar } from './texto.js';
 import { classificarTurnoSocial } from './conversation/turno-social.js';
@@ -266,6 +269,26 @@ export class Motor {
       ? await compactarSeNecessario(this.db, this.llm, conversa.id)
       : SEM_CUSTO;
 
+    // A rede determinística, antes de qualquer chamada paga: palavra do tenant
+    // na mensagem do cliente aciona o responsável mesmo que o modelo não chame
+    // a ferramenta. As duas erram de formas opostas, e por isso existem as duas.
+    if (persistir && conversa) {
+      for (const regra of alertasDaMensagem(
+        textoDaPergunta,
+        tenant.config.alertas ?? [],
+        normalizar,
+      )) {
+        registrarAlerta(this.db, {
+          tenantId: tenant.id,
+          conversaId: conversa.id,
+          tipo: regra.tipo,
+          detalhe: regra.detalhe,
+          mensagemDoCliente: textoDaPergunta,
+          origem: 'palavra-chave',
+        });
+      }
+    }
+
     const contexto = conversa
       ? montarContextoDaConversa(this.db, conversa.id)
       : { historico: [] as TurnoDaConversa[] };
@@ -282,24 +305,55 @@ export class Motor {
       conversa !== undefined &&
       tenant.config.agenda !== undefined;
 
+    // A ferramenta de avisar o responsável vale para TODO cliente: chamar quem
+    // é dono do negócio não é recurso de clínica. Só entra quando há conversa,
+    // pela mesma razão das de agenda — a avaliação roda sem conversa, e assim o
+    // prompt que ela mede continua sendo o mesmo de antes.
+    const ferramentasOferecidas: Ferramenta[] =
+      conversa === undefined
+        ? []
+        : [FERRAMENTA_DE_AVISO, ...(comFerramentas ? FERRAMENTAS_DA_AGENDA : [])];
+
     const resposta = await this.conversarComFerramentas({
       promptDoSistema: montarPromptDoSistema(
         tenant.promptDoSistema,
         contexto.resumo,
         comFerramentas ? regrasDaAgenda(hojeParaOPrompt()) : undefined,
+        ferramentasOferecidas.length > 0 ? regrasDeAviso() : undefined,
       ),
       mensagem: montarMensagemComContexto(textoDaPergunta, relevantes, incerto),
       historico: contexto.historico,
-      ferramentas: comFerramentas
-        ? {
+      ferramentas: ferramentasOferecidas,
+      executar: (nome, argumentos) => {
+        // A ferramenta de aviso vale para todo cliente; as da agenda, só para
+        // quem configurou. O despacho fica aqui, e não dentro de um executor
+        // só, porque são dois assuntos com contextos diferentes.
+        if (nome === FERRAMENTA_DE_AVISO.nome) {
+          return executarAviso(
+            {
+              db: this.db,
+              tenantId: tenant.id,
+              semPersistir: !persistir,
+              mensagemDoCliente: textoDaPergunta,
+              ...(conversa ? { conversaId: conversa.id } : {}),
+            },
+            argumentos,
+          );
+        }
+
+        return executarFerramenta(
+          {
             db: this.db,
             tenantId: tenant.id,
             contatoId,
             agenda,
             semPersistir: !persistir,
             ...(conversa ? { conversaId: conversa.id } : {}),
-          }
-        : undefined,
+          },
+          nome,
+          argumentos,
+        );
+      },
     });
 
     const texto = limitarLinhas(resposta.texto, config.resposta.maximoDeLinhas);
@@ -374,9 +428,13 @@ export class Motor {
     promptDoSistema: string;
     mensagem: string;
     historico: TurnoDaConversa[];
-    ferramentas?: ContextoDasFerramentas;
+    /** O que oferecer ao modelo. Vazio = nenhuma ferramenta nesta conversa. */
+    ferramentas: Ferramenta[];
+    /** Despacha a chamada. Nunca lança: erro vira texto para o modelo ler. */
+    executar: (nome: string, argumentos: Record<string, unknown>) => string;
   }): Promise<RespostaDoLlm & { usouFerramenta: boolean }> {
-    const opcoes = p.ferramentas ? { ferramentas: FERRAMENTAS_DA_AGENDA } : {};
+    const temFerramentas = p.ferramentas.length > 0;
+    const opcoes = temFerramentas ? { ferramentas: p.ferramentas } : {};
 
     let resposta = await this.llm.responder(p.promptDoSistema, p.mensagem, p.historico, opcoes);
     let tokensEntrada = resposta.tokensEntrada;
@@ -386,7 +444,7 @@ export class Motor {
     let volta = 0;
 
     while (
-      p.ferramentas &&
+      temFerramentas &&
       resposta.ferramentas &&
       resposta.ferramentas.length > 0 &&
       volta < config.agenda.maximoDeVoltas
@@ -394,12 +452,12 @@ export class Motor {
       for (const chamada of resposta.ferramentas) {
         turnos.push({
           chamada,
-          resultado: executarFerramenta(p.ferramentas, chamada.nome, chamada.argumentos),
+          resultado: p.executar(chamada.nome, chamada.argumentos),
         });
       }
 
       resposta = await this.llm.responder(p.promptDoSistema, p.mensagem, p.historico, {
-        ferramentas: FERRAMENTAS_DA_AGENDA,
+        ferramentas: p.ferramentas,
         turnosDeFerramenta: turnos,
       });
 

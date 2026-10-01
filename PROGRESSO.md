@@ -1151,6 +1151,91 @@ então a medição paga continua valendo.
 
 ---
 
+## Avisar o dono sem calar o bot (2026-10-01)
+
+A Polpa Santa Helena pediu três coisas que o motor não sabia fazer, e as três
+caem no mesmo buraco: **o bot precisa chamar uma pessoa e continuar
+conversando.**
+
+- Cliente pede desconto → a dona precisa saber, e a venda segue.
+- Horário da entrega → quem entrega é ela, então só ela confirma.
+- Perguntaram de um lugar que não está documentado → sinalizar a dúvida.
+
+Até aqui só existia o handoff, e ele significa duas coisas grudadas: *o bot não
+soube* e *o bot para de responder*. Se o bot calasse depois de dizer "vou
+confirmar o horário", o cliente que ainda não deu o endereço ficaria sem como
+terminar o pedido. A venda morreria exatamente no fim.
+
+### Alerta é tarefa; handoff é desistência
+
+Migration `006`, tabela `alerts`, separada de `handoffs` porque são conceitos
+diferentes:
+
+| | handoff | alerta |
+|---|---|---|
+| o bot | fica mudo | continua conversando |
+| significa | não soube | alguém precisa decidir |
+| taxa de resolução | conta contra | não conta |
+
+A métrica é a parte que não é óbvia. Confirmar horário acontece em **toda**
+venda de quem entrega pessoalmente; se contasse contra, a taxa da Santa Helena
+ficaria em zero para sempre e deixaria de medir qualquer coisa. Handoff de
+verdade continua contando.
+
+Índice único parcial `(conversation_id, kind) WHERE resolved_at IS NULL`: quem
+escreve "desconto" três vezes gera UM aviso. Parcial porque, depois de
+resolvido, o assunto pode voltar numa venda nova.
+
+### Duas redes, porque elas erram de formas opostas
+
+**A ferramenta** `avisar_responsavel` o modelo chama quando percebe o caso —
+pega o pedido torto que nenhuma lista prevê. **A palavra-chave** do
+`tenant.json` dispara sozinha, antes de qualquer chamada paga, e nunca esquece.
+
+A primeira conversa real provou que as duas são necessárias: `"faz um
+descontinho se eu levar 12kg?"` **não** fez o modelo chamar a ferramenta. Quem
+pegou foi a palavra-chave.
+
+E a lista precisa de **radicais, não palavras inteiras**: `"descontinho"` não
+contém `"desconto"`, contém `"descont"`. Configurar com a palavra completa
+deixaria passar justamente o diminutivo, que é como se pede abatimento no
+WhatsApp.
+
+### A ferramenta de aviso vale para todo cliente
+
+Diferente da agenda, que é opt-in. Chamar quem é dono do negócio não é recurso
+de clínica — é o mínimo de um bot que atende em nome de outra pessoa. E é
+barata: uma definição contra as cinco da agenda.
+
+Isso obrigou a generalizar o laço de ferramentas do motor, que só conhecia a
+agenda: agora ele recebe a lista a oferecer e um despachante.
+
+### Medido na conversa real
+
+> — vocês entregam em sidrolândia?
+> — *"Em Sidrolândia eu vou confirmar com a responsável, tá?"*
+> — e em terenos?
+> — *"Em Terenos entregamos sim. Qual horário fica melhor pra você? Vou
+> confirmar com a responsável."*
+> — faz um descontinho se eu levar 12kg de açaí?
+> — *"Vou confirmar com a responsável. A partir de 10 kg tem condição especial,
+> mas o valor é combinado caso a caso."*
+
+Os três avisos chegaram ao painel com a mensagem do cliente citada — é ela que
+permite julgar falso positivo sem abrir a conversa.
+
+**Custo subiu**: de ~US$ 0,001 para ~US$ 0,0035 por mensagem, porque a
+ferramenta entra no prompt e cada aviso é uma volta a mais no laço. Para quem
+estava perdendo venda por não saber de pedido de desconto, paga-se.
+
+### A avaliação não mede isto
+
+Ferramenta só é oferecida quando há conversa, e `npm run avaliar` roda sem uma.
+O prompt que a suíte mede continua idêntico — nenhuma medição anterior foi
+invalidada —, mas também quer dizer que o comportamento de aviso só se testa
+conversando.
+---
+
 ## Fora de escopo nesta fase
 
 Confirmado com o usuário, não fazer:

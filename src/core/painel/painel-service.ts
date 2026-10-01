@@ -15,6 +15,7 @@ import {
   type PerguntaSemResposta,
 } from '../../storage/repositories/handoffs.js';
 import { listarLembretes, type Lembrete } from '../agenda/lembretes.js';
+import { listarAlertasPendentes, type Alerta } from '../alertas/alertas.js';
 
 export interface ResumoDeConversa {
   id: number;
@@ -57,6 +58,16 @@ export interface PainelDoTenant {
   };
   /** Handoffs que ninguem da equipe revisou ainda. */
   handoffsPendentes: HandoffPendente[];
+  /**
+   * Avisos esperando uma decisao do dono: desconto, horario de entrega a
+   * confirmar, duvida de cobertura.
+   *
+   * NAO entram na taxa de resolucao, e e de proposito. Confirmar horario
+   * acontece em TODA venda de quem entrega pessoalmente; se contasse contra, a
+   * taxa ficaria em zero para sempre e deixaria de medir qualquer coisa.
+   * Handoff de verdade -- o bot nao soube -- continua contando.
+   */
+  alertasPendentes: Alerta[];
   /**
    * Lembretes enfileirados que ainda não saíram.
    *
@@ -111,6 +122,7 @@ export function montarPainel(db: Db, slug: string, limiteDeConversas = 50): Pain
     taxaDeResolucao:
       totalDeConversas === 0 ? 0 : (totalDeConversas - tiveramHandoff) / totalDeConversas,
     handoffsPendentes: listarHandoffsPendentes(db, tenant.id),
+    alertasPendentes: listarAlertasPendentes(db, tenant.id),
     lembretesPendentes: listarLembretes(db, tenant.id, { limite: 50 }),
     mensagens: {
       total: mensagens.total,
