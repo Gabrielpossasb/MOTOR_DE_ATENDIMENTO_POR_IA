@@ -69,7 +69,14 @@ function marcarPara(contatoId: string, inicio: string): number {
 
 beforeEach(() => {
   db = abrirBanco(':memory:');
-  tenantId = salvarTenant(db, { slug: 'c', nome: 'C', config: {}, promptDoSistema: 'p' }).id;
+  // Com `agenda` no config: a agenda é opt-in por cliente, e sem ela o motor
+  // não oferece ferramenta nenhuma.
+  tenantId = salvarTenant(db, {
+    slug: 'c',
+    nome: 'C',
+    config: { agenda: AGENDA_PADRAO },
+    promptDoSistema: 'p',
+  }).id;
 });
 
 describe('as ferramentas oferecidas', () => {
@@ -459,6 +466,38 @@ describe('o laço de ferramentas no motor', () => {
 
     expect(llm.chamadas[0]?.promptDoSistema).toContain('Hoje é');
     expect(llm.chamadas[0]?.promptDoSistema).toContain('AGENDA:');
+  });
+
+  it('NÃO oferece ferramenta a quem não configurou agenda', async () => {
+    // A agenda é opt-in por cliente. Uma revendedora de polpa vende e entrega,
+    // não marca horário — e as ferramentas falam "consulta", "paciente" e
+    // "convênio". Oferecê-las vazaria vocabulário errado na conversa e pagaria
+    // ~700 tokens por mensagem para não usar nada.
+    const semAgenda = salvarTenant(db, {
+      slug: 'loja',
+      nome: 'Loja',
+      config: {},
+      promptDoSistema: 'p',
+    });
+
+    const documentId = salvarDocumento(db, semAgenda.id, 'faq.md', DOCUMENTO);
+    inserirChunks(db, [
+      {
+        documentId,
+        tenantId: semAgenda.id,
+        indice: 0,
+        texto: DOCUMENTO,
+        embedding: vetorDeTexto(DOCUMENTO),
+        metadados: {},
+      },
+    ]);
+
+    const llm = new LlmComFerramentas([undefined]);
+    const motor = new Motor({ db, embedder: new EmbedderFake(), llm });
+
+    await motor.responder('loja', 'contato-1', 'quero comprar polpa', { canal: 'web' });
+
+    expect(llm.chamadas[0]?.promptDoSistema).not.toContain('AGENDA:');
   });
 
   it('NÃO oferece ferramenta na avaliação, que roda sem conversa', async () => {

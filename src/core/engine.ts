@@ -271,7 +271,16 @@ export class Motor {
       : { historico: [] as TurnoDaConversa[] };
 
     const agenda = tenant.config.agenda ?? AGENDA_PADRAO;
-    const comFerramentas = config.agenda.ferramentasSempre && conversa !== undefined;
+
+    // A agenda é OPT-IN por cliente: só entra para quem configurou `agenda` no
+    // tenant.json. Nem todo negócio marca horário — uma revendedora de polpa
+    // vende e entrega —, e as ferramentas falam "consulta", "paciente" e
+    // "convênio". Oferecê-las a quem não agenda vaza vocabulário errado na
+    // conversa e ainda paga ~700 tokens por mensagem para não usar nada.
+    const comFerramentas =
+      config.agenda.ferramentasSempre &&
+      conversa !== undefined &&
+      tenant.config.agenda !== undefined;
 
     const resposta = await this.conversarComFerramentas({
       promptDoSistema: montarPromptDoSistema(

@@ -137,7 +137,12 @@ function extrairValores(texto: string): string[] {
   const encontrados = new Set<string>();
   for (const padrao of padroes) {
     for (const achado of texto.match(padrao) ?? []) {
-      encontrados.add(achado.trim());
+      // Tira pontuação do fim antes de comparar. `[\d.,]+` é guloso e engole o
+      // ponto final da frase: a resposta "sai por R$ 35,00." virava o valor
+      // "R$ 35,00." e não casava com o "R$ 35,00 o quilo" do documento —
+      // acusando invenção de um preço que estava lá. Falso positivo numa regra
+      // de segurança é pior que regra nenhuma: ensina a ignorar o aviso.
+      encontrados.add(achado.trim().replace(/[.,]+$/, ''));
     }
   }
 

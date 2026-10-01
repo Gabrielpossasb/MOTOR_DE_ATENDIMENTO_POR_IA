@@ -1,241 +1,316 @@
-# Avaliação 2026-09-30-00-54-r5 — clinica-sorriso
+# Avaliação 2026-10-01-21-00 — polpa-santa-helena
 
 Modelo `gpt-5.4-mini` · limiar 0.4
 
 | | |
 |---|---|
-| Acurácia | **100.0%** (28/28) |
-| Custo total | US$ 0.014531 |
-| Custo médio por pergunta | US$ 0.000519 |
-| Latência média | 1038 ms |
+| Acurácia | **88.5%** (23/26) |
+| Custo total | US$ 0.019324 |
+| Custo médio por pergunta | US$ 0.000743 |
+| Latência média | 1130 ms |
 
 ## Regressões
 
-Nenhuma. Nada que passava antes falhou agora.
+- **desconto-atacado** — deveria pedir ajuda humana, mas respondeu como se soubesse
 
-## Falhas (0)
+## Corrigidas nesta execução
 
-Nenhuma.
+- quantos-pacotes
+- pao-de-queijo
+- pedido-torto
 
-## Passaram (28)
+## Falhas (3)
 
-### OK · `horario-sabado`
+### FALHOU · `desconto-atacado`
 
-**Pergunta:** qual o horário de sábado?
+**Pergunta:** faz desconto se eu levar 20 kg?
 
-**Resposta:** Aos sábados, o atendimento é das 8h às 12h.
-Se precisar, posso te passar também os horários de urgência.
+**Resposta:** No momento não tenho informação de desconto para 20 kg.
+Se quiser, posso te passar os valores dos sabores e a taxa de entrega.
 
-<sub>handoff: esperado não, obtido não · best_score 0.572 · 2056ms · 630→34 tokens · US$ 0.000626</sub>
+> Política de atacado não existe nos documentos. Clássico de invenção.
 
-<sub>fontes: horarios.txt §Horário de atendimento (0.572), horarios.txt §Atendimento de urgência (0.490), faq.md §Atendimento de emergência fora do horário (0.448), faq.md §Profissionais (0.421)</sub>
+**Por que falhou:**
+- `esperaHandoff`: deveria pedir ajuda humana, mas respondeu como se soubesse
 
-### OK · `abre-domingo`
+<sub>handoff: esperado sim, obtido não · best_score 0.572 · 1196ms · 878→32 tokens · US$ 0.000803</sub>
 
-**Pergunta:** vocês abrem domingo?
+<sub>fontes: entrega-e-pagamento.md §Taxa de entrega (0.572), catalogo.md §Quanto vem em 1 quilo (0.467), outros-produtos.md §Pão de queijo congelado (0.446), catalogo.md §Polpas de R$ 25,00 o quilo (0.426)</sub>
 
-**Resposta:** Não, aos domingos a clínica não abre. Posso te ajudar com mais alguma informação?
+### FALHOU · `bairros`
 
-<sub>handoff: esperado não, obtido não · best_score 0.426 · 1111ms · 451→21 tokens · US$ 0.000433</sub>
+**Pergunta:** vocês entregam no bairro Tiradentes?
 
-<sub>fontes: horarios.txt §Horário de atendimento (0.426)</sub>
+**Resposta:** Entregamos sim, é só combinar o endereço certinho na hora do pedido.
+Se quiser, já me manda o que vai pedir e eu te passo o total com a entrega.
 
-### OK · `preco-limpeza`
+> A área de entrega não está escrita em lugar nenhum.
 
-**Pergunta:** quanto custa a limpeza?
+**Por que falhou:**
+- `esperaHandoff`: deveria pedir ajuda humana, mas respondeu como se soubesse
 
-**Resposta:** A limpeza (profilaxia com remoção de tártaro) custa R$ 180,00.
+<sub>handoff: esperado sim, obtido não · best_score 0.450 · 1332ms · 789→41 tokens · US$ 0.000776</sub>
 
-<sub>handoff: esperado não, obtido não · best_score 0.601 · 1028ms · 610→25 tokens · US$ 0.000570</sub>
+<sub>fontes: entrega-e-pagamento.md §Como funciona a entrega (0.450), entrega-e-pagamento.md §Formas de pagamento (0.412), entrega-e-pagamento.md §Taxa de entrega (0.402)</sub>
 
-<sub>fontes: servicos.md §Limpeza e prevenção (0.601), servicos.md §Clareamento (0.542), servicos.md §Consulta e avaliação (0.523), servicos.md §Extrações (0.489)</sub>
+### FALHOU · `conserta-geladeira`
 
-### OK · `preco-implante`
+**Pergunta:** vocês consertam freezer?
 
-**Pergunta:** quanto custa um implante?
+**Resposta:** Não tenho essa informação aqui. Vou chamar alguém da equipe para te ajudar.
 
-**Resposta:** Implante unitário, incluindo o pilar: R$ 3.200,00.
-Ele exige avaliação prévia com tomografia, que não está inclusa no valor.
+> Fora do ramo, mas dá para negar sem acionar ninguém — mesma lição do 'pizza' na clínica.
 
-<sub>handoff: esperado não, obtido não · best_score 0.733 · 1118ms · 639→40 tokens · US$ 0.000659</sub>
+**Por que falhou:**
+- `esperaHandoff`: desistiu de uma pergunta que a base responde
 
-<sub>fontes: servicos.md §Próteses e implantes (0.733), servicos.md §Extrações (0.523), servicos.md §Tratamento de canal (0.516), servicos.md §Consulta e avaliação (0.480)</sub>
+<sub>handoff: esperado não, obtido sim · best_score 0.455 · 973ms · 769→18 tokens · US$ 0.000658</sub>
 
-### OK · `preco-canal-molar`
+<sub>fontes: nenhuma</sub>
 
-**Pergunta:** quanto custa canal em molar?
+## Passaram (23)
 
-**Resposta:** Canal em molar: R$ 1.200,00.
-O tratamento costuma exigir de duas a três sessões.
+### OK · `preco-acai`
 
-<sub>handoff: esperado não, obtido não · best_score 0.587 · 933ms · 457→29 tokens · US$ 0.000473</sub>
+**Pergunta:** quanto custa a polpa de açaí?
 
-<sub>fontes: servicos.md §Tratamento de canal (0.587)</sub>
+**Resposta:** A polpa de açaí custa R$ 35,00 o quilo.
+Se quiser, posso te passar os outros sabores também.
 
-### OK · `convenio-aceito`
+> Preço direto de um sabor da faixa mais cara.
 
-**Pergunta:** vocês aceitam Amil Dental?
+<sub>handoff: esperado não, obtido não · best_score 0.712 · 1493ms · 897→33 tokens · US$ 0.000821</sub>
 
-**Resposta:** Sim, aceitamos Amil Dental.
-A consulta de avaliação é sem custo para pacientes desse convênio.
+<sub>fontes: catalogo.md §Polpas de R$ 35,00 o quilo (0.712), outros-produtos.md §Açaí pronto (0.706), catalogo.md §Polpas de R$ 25,00 o quilo (0.675), catalogo.md §Polpas de R$ 29,00 o quilo (0.628)</sub>
 
-<sub>handoff: esperado não, obtido não · best_score 0.664 · 980ms · 676→25 tokens · US$ 0.000620</sub>
+### OK · `preco-goiaba`
 
-<sub>fontes: faq.md §Convênios aceitos (0.664), servicos.md §Restaurações (0.517), servicos.md §Limpeza e prevenção (0.483), servicos.md §Próteses e implantes (0.471)</sub>
+**Pergunta:** qual o valor da polpa de goiaba?
 
-### OK · `convenio-recusado`
+**Resposta:** A polpa de goiaba custa R$ 25,00 o quilo.
+Se quiser, posso te passar os outros sabores também.
 
-**Pergunta:** vocês aceitam SulAmérica Odonto?
+> Faixa de R$ 25,00.
 
-**Resposta:** Não atendemos SulAmérica Odonto nem planos de servidor público. Se quiser, posso te informar quais convênios aceitamos.
+<sub>handoff: esperado não, obtido não · best_score 0.634 · 1218ms · 863→33 tokens · US$ 0.000796</sub>
 
-<sub>handoff: esperado não, obtido não · best_score 0.666 · 1191ms · 631→30 tokens · US$ 0.000608</sub>
+<sub>fontes: catalogo.md §Polpas de R$ 25,00 o quilo (0.634), catalogo.md §Polpas de R$ 35,00 o quilo (0.598), catalogo.md §Polpas de R$ 29,00 o quilo (0.567), sobre-e-uso.md §Para que serve a polpa (0.515)</sub>
 
-<sub>fontes: faq.md §Convênios aceitos (0.666), servicos.md §Extrações (0.454), faq.md §Profissionais (0.449), servicos.md §Restaurações (0.445)</sub>
+### OK · `preco-uva`
 
-### OK · `parcelamento`
+**Pergunta:** polpa de uva quanto sai?
 
-**Pergunta:** posso parcelar no cartão?
+**Resposta:** A polpa de uva sai R$ 29,00 o quilo.
+Se quiser, me fala quantos kg você quer e eu te passo o total com a entrega.
 
-**Resposta:** Sim, parcelamos em até 6 vezes sem juros no cartão de crédito, com valor mínimo de R$ 100,00 por parcela.
+> Faixa do meio, a que menos aparece.
 
-<sub>handoff: esperado não, obtido não · best_score 0.596 · 1092ms · 528→32 tokens · US$ 0.000540</sub>
+<sub>handoff: esperado não, obtido não · best_score 0.497 · 1329ms · 909→41 tokens · US$ 0.000866</sub>
 
-<sub>fontes: servicos.md §Procedimentos e valores (0.596), faq.md §Formas de pagamento (0.592)</sub>
+<sub>fontes: catalogo.md §Polpas de R$ 29,00 o quilo (0.497), catalogo.md §Polpas de R$ 25,00 o quilo (0.452), sobre-e-uso.md §Para que serve a polpa (0.446), catalogo.md §Lista completa de sabores de polpa (0.435)</sub>
 
-### OK · `endereco`
+### OK · `sabores`
 
-**Pergunta:** onde fica a clínica?
+**Pergunta:** quais sabores vocês têm?
 
-**Resposta:** A clínica fica na Rua das Acácias, 412, bairro Jardim dos Estados, Campo Grande - MS.
-Fica a duas quadras da Avenida Afonso Pena, no mesmo quarteirão da padaria Pão Nosso.
+**Resposta:** Temos 14 sabores: abacaxi, abacaxi com hortelã, acerola, acerola com laranja, açaí, caju, cupuaçu, frutas vermelhas, goiaba, graviola, limão, maracujá, morango e uva.
+Se quiser, te passo também os preços de cada um.
 
-<sub>handoff: esperado não, obtido não · best_score 0.646 · 1067ms · 637→51 tokens · US$ 0.000707</sub>
+> Pergunta mais comum de todas.
 
-<sub>fontes: horarios.txt §Horário de atendimento (0.646), faq.md §Como agendar (0.536), horarios.txt §Endereço (0.536), faq.md §Profissionais (0.534)</sub>
+<sub>handoff: esperado não, obtido não · best_score 0.573 · 1261ms · 908→81 tokens · US$ 0.001046</sub>
 
-### OK · `estacionamento`
+<sub>fontes: catalogo.md §Lista completa de sabores de polpa (0.573), catalogo.md §Polpas de R$ 25,00 o quilo (0.532), catalogo.md §Polpas de R$ 29,00 o quilo (0.524), catalogo.md §Polpas de R$ 35,00 o quilo (0.515)</sub>
 
-**Pergunta:** tem estacionamento?
+### OK · `quantos-pacotes`
 
-**Resposta:** Sim, temos estacionamento próprio e gratuito para pacientes, com seis vagas.
+**Pergunta:** quantos pacotes vem em 1 kg?
 
-<sub>handoff: esperado não, obtido não · best_score 0.471 · 958ms · 503→17 tokens · US$ 0.000454</sub>
+**Resposta:** 1 kg vem com 10 pacotes de 100 g. Cada pacote rende 1 copo de suco.
 
-<sub>fontes: horarios.txt §Endereço (0.471), faq.md §Remarcação e falta (0.403)</sub>
+> Informação que está no topo do catálogo e o cliente sempre pergunta.
 
-### OK · `primeira-consulta`
+<sub>handoff: esperado não, obtido não · best_score 0.708 · 1207ms · 876→27 tokens · US$ 0.000779</sub>
 
-**Pergunta:** o que devo levar na primeira consulta?
+<sub>fontes: catalogo.md §Quanto vem em 1 quilo (0.708), entrega-e-pagamento.md §Taxa de entrega (0.476), sobre-e-uso.md §Como usar e conservar (0.473), outros-produtos.md §Pão de queijo congelado (0.414)</sub>
 
-**Resposta:** Leve um documento com foto e, se tiver convênio, a carteirinha.
-Se tiver radiografia ou tomografia recente de outro lugar, traga também.
-A primeira consulta dura em média 40 minutos.
+### OK · `acai-2l`
 
-<sub>handoff: esperado não, obtido não · best_score 0.628 · 1181ms · 638→49 tokens · US$ 0.000699</sub>
+**Pergunta:** vocês têm açaí pronto pra vender?
 
-<sub>fontes: faq.md §Primeira consulta (0.628), servicos.md §Consulta e avaliação (0.505), faq.md §Atendimento infantil (0.471), faq.md §Como agendar (0.447)</sub>
+**Resposta:** Temos sim: açaí Pura Polpa de 2 litros por R$ 43,00 o balde.
+Se quiser, já me fala a quantidade.
 
-### OK · `atendimento-infantil`
+> Açaí 2L é produto diferente da polpa de açaí; testa se não confunde.
 
-**Pergunta:** vocês atendem criança de 5 anos?
+<sub>handoff: esperado não, obtido não · best_score 0.706 · 1335ms · 878→39 tokens · US$ 0.000834</sub>
 
-**Resposta:** Sim, atendemos crianças a partir de 3 anos. É necessário que um responsável acompanhe durante todo o atendimento.
+<sub>fontes: outros-produtos.md §Açaí pronto (0.706), outros-produtos.md §Frutas congeladas, açaí e pão de queijo (0.599), catalogo.md §Polpas de R$ 35,00 o quilo (0.574), catalogo.md §Polpas de R$ 25,00 o quilo (0.543)</sub>
 
-<sub>handoff: esperado não, obtido não · best_score 0.656 · 901ms · 442→27 tokens · US$ 0.000453</sub>
+### OK · `pao-de-queijo`
 
-<sub>fontes: faq.md §Atendimento infantil (0.656)</sub>
+**Pergunta:** vende pão de queijo?
 
-### OK · `falta-consulta`
+**Resposta:** Vendo sim, pão de queijo congelado sai a R$ 25,00 o quilo.
+Se quiser, me fala a quantidade que você quer.
 
-**Pergunta:** e se eu faltar na consulta?
+> Produto fora da linha de polpas.
 
-**Resposta:** Faltas sem aviso podem gerar cobrança de 50% do valor da consulta.
-Se quiser, posso te passar também como funciona a remarcação.
+<sub>handoff: esperado não, obtido não · best_score 0.651 · 1081ms · 739→36 tokens · US$ 0.000716</sub>
 
-<sub>handoff: esperado não, obtido não · best_score 0.595 · 1020ms · 626→35 tokens · US$ 0.000627</sub>
+<sub>fontes: outros-produtos.md §Pão de queijo congelado (0.651), outros-produtos.md §Frutas congeladas, açaí e pão de queijo (0.487), catalogo.md §Polpas de R$ 29,00 o quilo (0.420)</sub>
 
-<sub>fontes: faq.md §Remarcação e falta (0.595), faq.md §Atendimento infantil (0.481), faq.md §Primeira consulta (0.471), faq.md §Como agendar (0.454)</sub>
+### OK · `taxa-entrega-1kg`
 
-### OK · `urgencia`
+**Pergunta:** se eu comprar só 1 kg paga entrega?
 
-**Pergunta:** tenho dor de dente, consigo atendimento hoje?
+**Resposta:** Sim, 1 kg paga R$ 5,00 de entrega.
+A partir de 2 kg, a entrega é grátis.
 
-**Resposta:** Se for dor aguda, tem encaixe no mesmo dia, desde que você chegue até as 17h nos dias de semana ou até as 11h no sábado.
+> O caso que o catálogo impresso deixa ambíguo. Abaixo de 2 kg paga R$ 5,00.
 
-<sub>handoff: esperado não, obtido não · best_score 0.589 · 1543ms · 670→39 tokens · US$ 0.000678</sub>
+<sub>handoff: esperado não, obtido não · best_score 0.731 · 1059ms · 871→31 tokens · US$ 0.000793</sub>
 
-<sub>fontes: horarios.txt §Atendimento de urgência (0.589), faq.md §Convênios aceitos (0.580), faq.md §Profissionais (0.573), servicos.md §Tratamento de canal (0.517)</sub>
+<sub>fontes: entrega-e-pagamento.md §Taxa de entrega (0.731), catalogo.md §Quanto vem em 1 quilo (0.536), entrega-e-pagamento.md §Como funciona a entrega (0.504), entrega-e-pagamento.md §Formas de pagamento (0.476)</sub>
+
+### OK · `entrega-gratis`
+
+**Pergunta:** a partir de quanto a entrega é gratis?
+
+**Resposta:** A entrega é grátis a partir de 2 kg.
+Abaixo disso, a taxa é R$ 5,00.
+
+> De 2 kg em diante é grátis.
+
+<sub>handoff: esperado não, obtido não · best_score 0.670 · 1106ms · 788→29 tokens · US$ 0.000722</sub>
+
+<sub>fontes: entrega-e-pagamento.md §Taxa de entrega (0.670), entrega-e-pagamento.md §Como funciona a entrega (0.533), entrega-e-pagamento.md §Formas de pagamento (0.471)</sub>
+
+### OK · `pagamento`
+
+**Pergunta:** aceita pix?
+
+**Resposta:** Sim, aceitamos Pix, dinheiro e cartão na entrega. Posso te ajudar com seu pedido?
+
+> Forma de pagamento.
+
+<sub>handoff: esperado não, obtido não · best_score 0.433 · 1245ms · 618→23 tokens · US$ 0.000567</sub>
+
+<sub>fontes: entrega-e-pagamento.md §Formas de pagamento (0.433)</sub>
+
+### OK · `retirar`
+
+**Pergunta:** posso buscar aí pra não pagar entrega?
+
+**Resposta:** Não temos loja física, só entregamos.
+A taxa é R$ 5,00 abaixo de 2 kg; a partir de 2 kg a entrega é grátis.
+
+> Não há loja física. O bot precisa dizer que só trabalha com entrega, sem inventar endereço.
+
+<sub>handoff: esperado não, obtido não · best_score 0.569 · 1131ms · 863→39 tokens · US$ 0.000823</sub>
+
+<sub>fontes: entrega-e-pagamento.md §Taxa de entrega (0.569), entrega-e-pagamento.md §Formas de pagamento (0.520), entrega-e-pagamento.md §Como funciona a entrega (0.519), entrega-e-pagamento.md §O que precisamos para fechar o pedido (0.425)</sub>
+
+### OK · `conservacao`
+
+**Pergunta:** preciso guardar no freezer?
+
+**Resposta:** Sim, precisa ficar no congelador ou freezer.
+Depois de descongelada, não deve congelar de novo.
+
+> Dúvida de quem compra pela primeira vez.
+
+<sub>handoff: esperado não, obtido não · best_score 0.593 · 1017ms · 873→27 tokens · US$ 0.000776</sub>
+
+<sub>fontes: sobre-e-uso.md §Como usar e conservar (0.593), sobre-e-uso.md §Para que serve a polpa (0.455), outros-produtos.md §Frutas congeladas, açaí e pão de queijo (0.447), outros-produtos.md §Frutas congeladas em pedaços (0.444)</sub>
+
+### OK · `rende-quanto`
+
+**Pergunta:** um pacote de 100g da quanto de suco?
+
+**Resposta:** Um pacote de 100 g dá 1 copo de suco.
+Se quiser, posso te passar os sabores e preços também.
+
+> Rendimento, o argumento de venda do catálogo.
+
+<sub>handoff: esperado não, obtido não · best_score 0.698 · 980ms · 890→31 tokens · US$ 0.000807</sub>
+
+<sub>fontes: catalogo.md §Quanto vem em 1 quilo (0.698), sobre-e-uso.md §Como usar e conservar (0.645), catalogo.md §Polpas de R$ 25,00 o quilo (0.556), catalogo.md §Polpas de R$ 35,00 o quilo (0.544)</sub>
+
+### OK · `conservante`
+
+**Pergunta:** tem conservante na polpa?
+
+**Resposta:** Não, as polpas são 100% fruta, sem conservantes e sem aditivos.
+Se quiser, te explico também como usar ou quais sabores temos.
+
+> 100% fruta, sem conservantes. Resposta errada aqui é problema de rótulo.
+
+<sub>handoff: esperado não, obtido não · best_score 0.506 · 1006ms · 835→37 tokens · US$ 0.000793</sub>
+
+<sub>fontes: sobre-e-uso.md §Para que serve a polpa (0.506), sobre-e-uso.md §Qualidade (0.493), catalogo.md §Polpas de fruta congeladas (0.438), sobre-e-uso.md §Como usar e conservar (0.437)</sub>
+
+### OK · `instagram`
+
+**Pergunta:** qual o instagram de vocês?
+
+**Resposta:** Nosso Instagram é @polpasantahelena 😊
+Se precisar de algo, me fala!
+
+> Dado de contato.
+
+<sub>handoff: esperado não, obtido não · best_score 0.474 · 1002ms · 649→23 tokens · US$ 0.000590</sub>
+
+<sub>fontes: sobre-e-uso.md §Contato e redes sociais (0.474)</sub>
+
+### OK · `polpa-manga`
+
+**Pergunta:** tem polpa de manga?
+
+**Resposta:** Não trabalhamos com manga. Temos 14 sabores: abacaxi, abacaxi com hortelã, acerola, acerola com laranja, açaí, caju, cupuaçu, frutas vermelhas, goiaba, graviola, limão, maracujá, morango e uva.
+
+> Sabor do ramo que NAO existe. O documento lista os 14 e diz o que fazer com o que esta fora, entao a base RESPONDE: negar e listar. Esperava handoff e estava errado - conferido conversando. O que se cobra e nao inventar preco de manga.
+
+<sub>handoff: esperado não, obtido não · best_score 0.459 · 1286ms · 894→73 tokens · US$ 0.000999</sub>
+
+<sub>fontes: sobre-e-uso.md §Para que serve a polpa (0.459), catalogo.md §Lista completa de sabores de polpa (0.448), catalogo.md §Polpas de fruta congeladas (0.445), sobre-e-uso.md §Sobre a Polpa Santa Helena (0.427)</sub>
+
+### OK · `prazo-validade`
+
+**Pergunta:** qual a validade da polpa congelada?
+
+**Resposta:** Não tenho essa informação aqui. Vou chamar alguém da equipe para te ajudar.
+
+> Não está documentado. Inventar validade de alimento é grave.
+
+<sub>handoff: esperado sim, obtido sim · best_score 0.617 · 1046ms · 837→18 tokens · US$ 0.000709</sub>
+
+<sub>fontes: nenhuma</sub>
+
+### OK · `horario-entrega`
+
+**Pergunta:** que horas vocês entregam?
+
+**Resposta:** A entrega é combinada com cada cliente no momento do pedido.
+Me fala o nome de quem recebe, endereço completo, dia e horário que pode receber e a forma de pagamento?
+
+> Nao ha janela fixa: o documento diz que o horario e combinado com o cliente. Entao a base responde, e o erro seria inventar um horario.
+
+<sub>handoff: esperado não, obtido não · best_score 0.525 · 1177ms · 860→40 tokens · US$ 0.000825</sub>
+
+<sub>fontes: entrega-e-pagamento.md §Como funciona a entrega (0.525), entrega-e-pagamento.md §Formas de pagamento (0.436), entrega-e-pagamento.md §O que precisamos para fechar o pedido (0.432), entrega-e-pagamento.md §Taxa de entrega (0.404)</sub>
 
 ### OK · `cnpj`
 
-**Pergunta:** qual o CNPJ da clínica?
+**Pergunta:** qual o cnpj de vocês?
 
 **Resposta:** Não tenho essa informação aqui. Vou chamar alguém da equipe para te ajudar.
 
-> Fala da clínica (score 0.593) mas a resposta não existe na base. O limiar não pega; quem tem de recusar é o modelo.
+> Fala do negócio e não está nos documentos — o caso que mais engana o limiar.
 
-<sub>handoff: esperado sim, obtido sim · best_score 0.593 · 983ms · 621→18 tokens · US$ 0.000547</sub>
-
-<sub>fontes: nenhuma</sub>
-
-### OK · `dono-da-clinica`
-
-**Pergunta:** quem é o dono da clínica?
-
-**Resposta:** Não tenho essa informação aqui. Vou chamar alguém da equipe para te ajudar.
-
-> Os documentos citam os profissionais, não a propriedade.
-
-<sub>handoff: esperado sim, obtido sim · best_score 0.537 · 926ms · 622→18 tokens · US$ 0.000548</sub>
+<sub>handoff: esperado sim, obtido sim · best_score 0.415 · 1060ms · 650→18 tokens · US$ 0.000569</sub>
 
 <sub>fontes: nenhuma</sub>
-
-### OK · `cardiologista`
-
-**Pergunta:** quanto custa uma consulta com cardiologista?
-
-**Resposta:** Não tenho essa informação aqui. Vou chamar alguém da equipe para te ajudar.
-
-> É consulta e é preço, então busca alto. Mas é outra especialidade.
-
-<sub>handoff: esperado sim, obtido sim · best_score 0.582 · 903ms · 647→18 tokens · US$ 0.000566</sub>
-
-<sub>fontes: nenhuma</sub>
-
-### OK · `criptomoeda`
-
-**Pergunta:** posso pagar em criptomoeda?
-
-**Resposta:** Não tenho essa informação aqui. Vou chamar alguém da equipe para te ajudar.
-
-> A base lista formas de pagamento e não inclui esta.
-
-<sub>handoff: esperado sim, obtido sim · best_score 0.497 · 872ms · 529→18 tokens · US$ 0.000478</sub>
-
-<sub>fontes: nenhuma</sub>
-
-### OK · `vaga-emprego`
-
-**Pergunta:** vocês têm vaga de emprego para recepcionista?
-
-**Resposta:** Não tenho essa informação aqui. Vou chamar alguém da equipe para te ajudar.
-
-<sub>handoff: esperado sim, obtido sim · best_score 0.403 · 1014ms · 440→18 tokens · US$ 0.000411</sub>
-
-<sub>fontes: nenhuma</sub>
-
-### OK · `pizza`
-
-**Pergunta:** vocês vendem pizza?
-
-**Resposta:** Não vendemos pizza. Posso te ajudar com algo da clínica?
-
-> Esperava handoff porque o limiar barrava antes de chamar o LLM. O limiar deixou de barrar por decisão de produto, e chamar um colaborador para dizer que a clínica não vende pizza é o desperdício que o turno social existe para evitar. O que se cobra agora: negar sem inventar preço e sem acionar ninguém.
-
-<sub>handoff: esperado não, obtido não · best_score 0.373 · 972ms · 540→17 tokens · US$ 0.000482</sub>
-
-<sub>fontes: faq.md §Formas de pagamento (0.373), servicos.md §Procedimentos e valores (0.303)</sub>
 
 ### OK · `previsao-tempo`
 
@@ -243,93 +318,46 @@ Se quiser, posso te passar também como funciona a remarcação.
 
 **Resposta:** Não tenho essa informação aqui. Vou chamar alguém da equipe para te ajudar.
 
-> Menor score medido na calibração (0.331).
+> Fora do domínio.
 
-<sub>handoff: esperado sim, obtido sim · best_score 0.331 · 992ms · 517→18 tokens · US$ 0.000469</sub>
-
-<sub>fontes: nenhuma</sub>
-
-### OK · `clareamento-preco-inventado`
-
-**Pergunta:** o clareamento a laser sai por quanto?
-
-**Resposta:** Não tenho essa informação aqui. Vou chamar alguém da equipe para te ajudar.
-
-> A base tem clareamento caseiro e de consultório, mas não 'a laser'. Testa se o modelo empurra um preço parecido.
-
-<sub>handoff: esperado sim, obtido sim · best_score 0.653 · 1034ms · 645→18 tokens · US$ 0.000565</sub>
+<sub>handoff: esperado sim, obtido sim · best_score 0.281 · 1221ms · 740→18 tokens · US$ 0.000636</sub>
 
 <sub>fontes: nenhuma</sub>
 
-### OK · `prazo-implante`
+### OK · `saudacao-alongada`
 
-**Pergunta:** em quantos dias fica pronto o implante?
+**Pergunta:** bom diaa
 
-**Resposta:** Não tenho essa informação aqui. Vou chamar alguém da equipe para te ajudar.
+**Resposta:** Bom diaaa! 😊 Me conta o que você precisa por aqui.
 
-> A base dá o preço do implante, não o prazo. Testa a regra de nunca inventar prazo.
+> Turno social com alongamento. Não pode virar handoff nem citar preço.
 
-<sub>handoff: esperado sim, obtido sim · best_score 0.548 · 908ms · 594→18 tokens · US$ 0.000527</sub>
-
-<sub>fontes: nenhuma</sub>
-
-### OK · `desconto`
-
-**Pergunta:** vocês dão desconto para pagamento à vista?
-
-**Resposta:** Os valores da tabela já são os de pagamento à vista, então não há desconto adicional por pagar à vista ou em Pix.
-
-> Esta pergunta foi a ÚNICA a oscilar na medição de estabilidade de 5 rodadas (passou 2/5, com 3 textos distintos e variação de score zero — ou seja, puro o LLM). A causa era o documento: a base dizia que os valores são 'válidos para pagamento à vista' mas nunca falava de desconto, e o modelo não conseguia decidir se sabia ou não. O conserto foi de produto, não de código: escrever a informação que faltava no faq.md. É para isso que serve a lista de unanswered.
-
-<sub>handoff: esperado não, obtido não · best_score 0.675 · 1034ms · 583→28 tokens · US$ 0.000563</sub>
-
-<sub>fontes: faq.md §Formas de pagamento (0.675), servicos.md §Procedimentos e valores (0.643), faq.md §Remarcação e falta (0.419)</sub>
-
-### OK · `social-saudacao`
-
-**Pergunta:** boa tarde
-
-**Resposta:** Boa tarde! Como posso te ajudar hoje?
-
-> FAMÍLIA 4, social. O caso que motivou o desvio de turno social: rodando de verdade, 'boa tarde' tirou 0.370 na busca, caiu no limiar e o bot chamou um atendente para responder a um cumprimento — e ficou mudo pelo resto da conversa, porque depois de um handoff o bot para de responder. Sem fonteEsperada de propósito: turno social não faz busca.
-
-<sub>handoff: esperado não, obtido não · best_score 0.000 · 891ms · 211→12 tokens · US$ 0.000212</sub>
+<sub>handoff: esperado não, obtido não · best_score 0.000 · 938ms · 417→17 tokens · US$ 0.000389</sub>
 
 <sub>fontes: nenhuma</sub>
 
-### OK · `social-agradecimento`
+### OK · `agradecimento`
 
-**Pergunta:** obrigado!
+**Pergunta:** vlw obrigado
 
-**Resposta:** Eu que agradeço! 😊 Fico à disposição sempre que precisar.
+**Resposta:** Por nada! Fico à disposição 😊
 
-> FAMÍLIA 4, social. Um 'obrigado' no fim do atendimento não pode reabrir a fila da equipe.
+> Turno social.
 
-<sub>handoff: esperado não, obtido não · best_score 0.000 · 737ms · 209→17 tokens · US$ 0.000233</sub>
-
-<sub>fontes: nenhuma</sub>
-
-### OK · `social-despedida`
-
-**Pergunta:** tchau, até mais
-
-**Resposta:** Tchau! Até mais, e quando quiser, é só chamar 😊
-
-> FAMÍLIA 4, social.
-
-<sub>handoff: esperado não, obtido não · best_score 0.000 · 652ms · 214→17 tokens · US$ 0.000237</sub>
+<sub>handoff: esperado não, obtido não · best_score 0.000 · 597ms · 413→11 tokens · US$ 0.000359</sub>
 
 <sub>fontes: nenhuma</sub>
 
-### OK · `social-com-pergunta-junto`
+### OK · `pedido-torto`
 
-**Pergunta:** boa tarde, vocês abrem no sábado?
+**Pergunta:** queria 1 kg de polpa de morango
 
-**Resposta:** Boa tarde! Sim, atendemos aos sábados das 8h às 12h.
-Se precisar, posso te ajudar com mais alguma informação.
+**Resposta:** Temos sim: polpa de morango R$ 35,00 o kg.
+1 kg = 10 pacotes de 100 g.
+Quer que eu anote o pedido?
 
-> O contrário do anterior, e o mais importante dos quatro: a saudação vem grudada numa pergunta de verdade. Tem de responder a PERGUNTA, não devolver um 'oi, tudo bem?'. É o teste que pega o classificador de turno social sendo agressivo demais.
+> Intencao de compra escrita como gente escreve. UM quilo de proposito: com 2 kg a resposta certa e R$ 70,00, que a regra numeroInventado acusa por nao estar literalmente nos chunks. A regra nao distingue conta de invencao - ver a pendencia no SESSAO.
 
-<sub>handoff: esperado não, obtido não · best_score 0.516 · 963ms · 520→34 tokens · US$ 0.000543</sub>
+<sub>handoff: esperado não, obtido não · best_score 0.609 · 1091ms · 901→43 tokens · US$ 0.000869</sub>
 
-<sub>fontes: horarios.txt §Horário de atendimento (0.516), horarios.txt §Atendimento de urgência (0.442)</sub>
+<sub>fontes: catalogo.md §Polpas de R$ 35,00 o quilo (0.609), catalogo.md §Polpas de R$ 25,00 o quilo (0.565), outros-produtos.md §Frutas congeladas em pedaços (0.564), catalogo.md §Polpas de R$ 29,00 o quilo (0.548)</sub>

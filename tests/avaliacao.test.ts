@@ -138,6 +138,26 @@ describe('verificar', () => {
 });
 
 describe('verificarNumerosInventados', () => {
+  it('NAO acusa quando so o ponto final difere', () => {
+    // Bug real, achado medindo a Polpa Santa Helena: o documento escreve
+    // "R$ 35,00 o quilo" e o bot respondeu "sai por R$ 35,00." — com ponto. O
+    // padrao de extracao e guloso e engolia o ponto, entao o valor nao casava e
+    // a regra acusava invencao de um preco que estava no documento.
+    //
+    // Falso positivo numa regra de seguranca e pior que regra nenhuma: ensina a
+    // ignorar o aviso justo quando ele estiver certo.
+    expect(
+      verificarNumerosInventados('Sai por R$ 35,00.', 'Estes sabores custam R$ 35,00 o quilo'),
+    ).toEqual([]);
+  });
+
+  it('continua acusando o valor que de fato nao existe', () => {
+    const falhas = verificarNumerosInventados('Sai por R$ 39,00.', 'custam R$ 35,00 o quilo');
+
+    expect(falhas).toHaveLength(1);
+    expect(falhas[0]?.detalhe).toContain('R$ 39,00');
+  });
+
   it('aceita valor em reais que está no contexto', () => {
     expect(verificarNumerosInventados('A limpeza custa R$ 180,00.', 'Limpeza: R$ 180,00.')).toEqual([]);
   });

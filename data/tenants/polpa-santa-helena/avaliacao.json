@@ -1,0 +1,222 @@
+{
+  "descricao": "Perguntas reais de clientes da Polpa Santa Helena. Três famílias: o documento responde, é do ramo mas não está documentado, e fora do assunto.",
+  "perguntas": [
+    {
+      "id": "preco-acai",
+      "pergunta": "quanto custa a polpa de açaí?",
+      "deveConter": [
+        "35"
+      ],
+      "fonteEsperada": "catalogo.md",
+      "comentario": "Preço direto de um sabor da faixa mais cara."
+    },
+    {
+      "id": "preco-goiaba",
+      "pergunta": "qual o valor da polpa de goiaba?",
+      "deveConter": [
+        "25"
+      ],
+      "fonteEsperada": "catalogo.md",
+      "comentario": "Faixa de R$ 25,00."
+    },
+    {
+      "id": "preco-uva",
+      "pergunta": "polpa de uva quanto sai?",
+      "deveConter": [
+        "29"
+      ],
+      "fonteEsperada": "catalogo.md",
+      "comentario": "Faixa do meio, a que menos aparece."
+    },
+    {
+      "id": "sabores",
+      "pergunta": "quais sabores vocês têm?",
+      "deveConter": [
+        "abacaxi"
+      ],
+      "fonteEsperada": "catalogo.md",
+      "comentario": "Pergunta mais comum de todas."
+    },
+    {
+      "id": "quantos-pacotes",
+      "pergunta": "quantos pacotes vem em 1 kg?",
+      "deveConter": [
+        "10"
+      ],
+      "fonteEsperada": "catalogo.md",
+      "comentario": "Informação que está no topo do catálogo e o cliente sempre pergunta."
+    },
+    {
+      "id": "acai-2l",
+      "pergunta": "vocês têm açaí pronto pra vender?",
+      "deveConter": [
+        "43"
+      ],
+      "comentario": "Açaí 2L é produto diferente da polpa de açaí; testa se não confunde."
+    },
+    {
+      "id": "pao-de-queijo",
+      "pergunta": "vende pão de queijo?",
+      "deveConter": [
+        "25"
+      ],
+      "fonteEsperada": "outros-produtos.md",
+      "comentario": "Produto fora da linha de polpas."
+    },
+    {
+      "id": "taxa-entrega-1kg",
+      "pergunta": "se eu comprar só 1 kg paga entrega?",
+      "deveConter": [
+        "5"
+      ],
+      "fonteEsperada": "entrega-e-pagamento.md",
+      "comentario": "O caso que o catálogo impresso deixa ambíguo. Abaixo de 2 kg paga R$ 5,00."
+    },
+    {
+      "id": "entrega-gratis",
+      "pergunta": "a partir de quanto a entrega é gratis?",
+      "deveConter": [
+        "2"
+      ],
+      "fonteEsperada": "entrega-e-pagamento.md",
+      "comentario": "De 2 kg em diante é grátis."
+    },
+    {
+      "id": "pagamento",
+      "pergunta": "aceita pix?",
+      "deveConter": [
+        "pix"
+      ],
+      "fonteEsperada": "entrega-e-pagamento.md",
+      "comentario": "Forma de pagamento."
+    },
+    {
+      "id": "retirar",
+      "pergunta": "posso buscar aí pra não pagar entrega?",
+      "naoPodeConter": [
+        "endereço da loja"
+      ],
+      "comentario": "Não há loja física. O bot precisa dizer que só trabalha com entrega, sem inventar endereço."
+    },
+    {
+      "id": "conservacao",
+      "pergunta": "preciso guardar no freezer?",
+      "deveConter": [
+        "congelador"
+      ],
+      "fonteEsperada": "sobre-e-uso.md",
+      "comentario": "Dúvida de quem compra pela primeira vez."
+    },
+    {
+      "id": "rende-quanto",
+      "pergunta": "um pacote de 100g da quanto de suco?",
+      "deveConter": [
+        "copo"
+      ],
+      "fonteEsperada": "sobre-e-uso.md",
+      "comentario": "Rendimento, o argumento de venda do catálogo."
+    },
+    {
+      "id": "conservante",
+      "pergunta": "tem conservante na polpa?",
+      "naoPodeConter": [
+        "sim, tem"
+      ],
+      "fonteEsperada": "catalogo.md",
+      "comentario": "100% fruta, sem conservantes. Resposta errada aqui é problema de rótulo."
+    },
+    {
+      "id": "instagram",
+      "pergunta": "qual o instagram de vocês?",
+      "deveConter": [
+        "polpasantahelena"
+      ],
+      "fonteEsperada": "sobre-e-uso.md",
+      "comentario": "Dado de contato."
+    },
+    {
+      "id": "polpa-manga",
+      "pergunta": "tem polpa de manga?",
+      "comentario": "Sabor do ramo que NAO existe. O documento lista os 14 e diz o que fazer com o que esta fora, entao a base RESPONDE: negar e listar. Esperava handoff e estava errado - conferido conversando. O que se cobra e nao inventar preco de manga.",
+      "esperaHandoff": false,
+      "naoPodeConter": [
+        "R$"
+      ]
+    },
+    {
+      "id": "desconto-atacado",
+      "pergunta": "faz desconto se eu levar 20 kg?",
+      "esperaHandoff": true,
+      "comentario": "Política de atacado não existe nos documentos. Clássico de invenção."
+    },
+    {
+      "id": "prazo-validade",
+      "pergunta": "qual a validade da polpa congelada?",
+      "esperaHandoff": true,
+      "comentario": "Não está documentado. Inventar validade de alimento é grave."
+    },
+    {
+      "id": "bairros",
+      "pergunta": "vocês entregam no bairro Tiradentes?",
+      "esperaHandoff": true,
+      "comentario": "A área de entrega não está escrita em lugar nenhum."
+    },
+    {
+      "id": "horario-entrega",
+      "pergunta": "que horas vocês entregam?",
+      "comentario": "Nao ha janela fixa: o documento diz que o horario e combinado com o cliente. Entao a base responde, e o erro seria inventar um horario.",
+      "esperaHandoff": false,
+      "naoPodeConter": [
+        "das 8",
+        "08:00"
+      ]
+    },
+    {
+      "id": "cnpj",
+      "pergunta": "qual o cnpj de vocês?",
+      "esperaHandoff": true,
+      "comentario": "Fala do negócio e não está nos documentos — o caso que mais engana o limiar."
+    },
+    {
+      "id": "previsao-tempo",
+      "pergunta": "qual a previsão do tempo amanhã?",
+      "esperaHandoff": true,
+      "comentario": "Fora do domínio."
+    },
+    {
+      "id": "conserta-geladeira",
+      "pergunta": "vocês consertam freezer?",
+      "esperaHandoff": false,
+      "naoPodeConter": [
+        "R$"
+      ],
+      "comentario": "Fora do ramo, mas dá para negar sem acionar ninguém — mesma lição do 'pizza' na clínica."
+    },
+    {
+      "id": "saudacao-alongada",
+      "pergunta": "bom diaa",
+      "esperaHandoff": false,
+      "naoPodeConter": [
+        "R$"
+      ],
+      "comentario": "Turno social com alongamento. Não pode virar handoff nem citar preço."
+    },
+    {
+      "id": "agradecimento",
+      "pergunta": "vlw obrigado",
+      "esperaHandoff": false,
+      "naoPodeConter": [
+        "R$"
+      ],
+      "comentario": "Turno social."
+    },
+    {
+      "id": "pedido-torto",
+      "pergunta": "queria 1 kg de polpa de morango",
+      "deveConter": [
+        "35"
+      ],
+      "comentario": "Intencao de compra escrita como gente escreve. UM quilo de proposito: com 2 kg a resposta certa e R$ 70,00, que a regra numeroInventado acusa por nao estar literalmente nos chunks. A regra nao distingue conta de invencao - ver a pendencia no SESSAO."
+    }
+  ]
+}
