@@ -1,10 +1,14 @@
 # Plano: o bot monta o pedido
 
-**Estado:** aprovado e **não iniciado**. Nenhuma linha deste plano foi escrita
-no código.
+**Estado: EXECUTADO** em 2026-10-02, nos commits `e2f804a`, `8d6349d`,
+`9508204` e `2158c52`. O relato do que foi medido está em `PROGRESSO.md`, seção
+**"O bot monta o pedido"** — é lá que se lê o resultado, não aqui.
+
+Este arquivo fica como registro do raciocínio que levou às mudanças, incluindo
+a causa raiz que a leitura do banco expôs. Duas coisas saíram diferentes do
+planejado e estão anotadas no fim, em **O que o plano não previu**.
+
 **Escrito em:** 2026-10-01, a partir da conversa 33 da Polpa Santa Helena.
-**Nada aqui está medido.** Os números citados são do que já aconteceu; o que o
-plano promete só vale depois de rodar.
 
 ---
 
@@ -338,6 +342,27 @@ Depois: `npm run conversas --id <nova>` com aproveitamento melhor que 89%, e o
 nessa conta — já conferido acima.
 
 ---
+
+## O que o plano não previu
+
+1. **O catálogo como anexo (item 1.5) NÃO foi feito.** A reclamação de "manda o
+   catálogo" ficou aberta. Quando a Camada 1 e a Parte 2 entraram, o bot passou
+   a perguntar *"quais polpas você quer e quantos quilos"* em vez de despejar os
+   14 sabores, e o `enviar_catalogo` deixou de ser o caminho mais curto para o
+   mesmo resultado. Vale medir se ainda incomoda antes de construir.
+2. **A auditoria precisou de conserto DUAS vezes**, e a segunda não estava no
+   plano: depois de ganhar os detectores, ela passou a acusar o recapitulativo
+   *"Até agora são…"* como `repetiu_informacao` — punindo exatamente o conserto.
+   Resposta que veio de ferramenta deixou de contar. O plano previu o risco em
+   uma linha ("sem ela a auditoria puniria o recapitulativo") e ainda assim a
+   guarda escrita não bastou; só a conversa real mostrou onde.
+3. **A taxa de entrega precisou congelar** (migration 008, não prevista). A 007
+   copiava o preço do item com a justificativa de registro histórico e deixava a
+   taxa de fora — mesmo argumento, meia aplicação.
+4. **O laço do horário.** O prompt dizia "NUNCA confirme o horário da entrega" e
+   o modelo leu como "não registre o horário": o pedido não fechava e a conversa
+   repetia o pedido de horário. Anotar e confirmar precisaram ser escritos como
+   coisas diferentes.
 
 ## Questões abertas, registradas e não inventadas
 
