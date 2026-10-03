@@ -286,9 +286,9 @@ Estão em `src/core/llm/prompts.ts` e valem para todo tenant:
    **Falar com o atendente virtual**, que destrava a conversa sem apagar o
    aviso pendente para a equipe.
 3. Nunca inventa preço, prazo, horário ou disponibilidade.
-4. No máximo 3 linhas, cortadas no código se o modelo passar. O teto é
-   ajustável por tenant (`maximoDeLinhas`): quem monta pedido precisa de mais,
-   e o corte é silencioso.
+4. No máximo 3 **mensagens** por turno, cortadas no código se o modelo passar.
+   O teto é `maximoDeLinhas`, ajustável por tenant, e o corte é silencioso —
+   num recapitulativo de pedido a mensagem perdida seria a do total.
 5. Uma mensagem por resposta.
 6. Se faltam vários dados, pergunta tudo de uma vez — e **só os que faltam**.
 7. **Marca, remarca e cancela consultas** pelas ferramentas de agenda. Nunca
@@ -302,23 +302,30 @@ Estão em `src/core/llm/prompts.ts` e valem para todo tenant:
    repete os dados antes de gravar. Os três estão na assinatura da ferramenta,
    não no prompt — e o telefone é conferido por contagem de dígitos, porque
    campo obrigatório de texto aceita "não informado".
-10. **Espera 2,5s antes de responder**, e junta as mensagens que chegarem
-    nesse intervalo num turno só. Ninguém escreve um parágrafo no WhatsApp:
-    escreve "quero marcar", "pra sexta", "as 9". O contador reinicia a cada
-    mensagem nova, com teto de 12s.
-11. **Monta o pedido pelas ferramentas** quando o tenant tem `vende: true`.
+10. **Espera 10s antes de responder**, e junta as mensagens que chegarem nesse
+    intervalo num turno só. Ninguém escreve um parágrafo no WhatsApp: escreve
+    "quero marcar", "pra sexta", "as 9". O contador reinicia a cada mensagem
+    nova, com teto de 30s. O preço é cobrado de todo turno, inclusive o de
+    mensagem única: uma pergunta solta leva ~13s para ser respondida.
+11. **Responde em VÁRIAS mensagens, não em parágrafo.** A quebra de linha sempre
+    foi a fronteira entre as ideias da resposta; o núcleo devolve `mensagens[]` e
+    cada borda escolhe a forma — balão por mensagem na página, mensagens
+    separadas no WhatsApp, linhas no terminal. O banco continua guardando **uma
+    linha por turno**, senão cada mensagem contaria como um turno e todo
+    aproveitamento já medido deixaria de ser comparável.
+12. **Monta o pedido pelas ferramentas** quando o tenant tem `vende: true`.
     O carrinho vive em tabela, não na cabeça do modelo: a conta é somada em
     código, o pedido sobrevive a qualquer janela de contexto, e produto que não
     está no catálogo é **recusa** em vez de aproximação. Quem não liga `vende`
     continua proibido de vender.
-12. **Nunca processa pagamento.** Anotar a forma escolhida é diferente — isso
+13. **Nunca processa pagamento.** Anotar a forma escolhida é diferente — isso
     ele faz, e quem recebe o dinheiro é a pessoa na entrega.
-13. **Nunca confirma horário de entrega.** Ele ANOTA o horário que o cliente
+14. **Nunca confirma horário de entrega.** Ele ANOTA o horário que o cliente
     pediu (obrigatório para fechar) e avisa que a responsável confirma. As duas
     coisas são diferentes, e confundi-las já travou uma conversa em laço: a
     coluna do banco se chama `preferred_time` justamente para ninguém conseguir
     gravar promessa por acidente.
-14. **Avisa o dono do negócio sem parar de conversar** (`avisar_responsavel`).
+15. **Avisa o dono do negócio sem parar de conversar** (`avisar_responsavel`).
     Diferente do handoff, que o cala. Pedido de desconto, horário a confirmar e
     dúvida de cobertura viram tarefa no painel, e a conversa continua.
 

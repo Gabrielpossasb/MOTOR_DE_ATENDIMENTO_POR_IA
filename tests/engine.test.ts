@@ -7,10 +7,15 @@ import { abrirBanco, type Db } from '../src/storage/db.js';
 import { salvarTenant } from '../src/storage/repositories/tenants.js';
 import { salvarDocumento } from '../src/storage/repositories/documents.js';
 import { inserirChunks } from '../src/storage/repositories/chunks.js';
-import { Motor, limitarLinhas, pediuAjudaHumana } from '../src/core/engine.js';
+import {
+  Motor,
+  dividirEmMensagens,
+  limitarLinhas,
+  pediuAjudaHumana,
+} from '../src/core/engine.js';
 import { config } from '../src/config.js';
 import { EmbedderFake, vetorDeTexto } from './helpers/fake-embedder.js';
-import { LlmFake } from './helpers/fake-llm.js';
+import { LlmFake, LlmQueDesiste } from './helpers/fake-llm.js';
 import type { ConfigDoTenant } from '../src/core/types.js';
 
 const SLUG = 'clinica';
@@ -434,6 +439,63 @@ describe('limitarLinhas', () => {
 
   it('não mexe em resposta que já cabe', () => {
     expect(limitarLinhas('uma linha só', 3)).toBe('uma linha só');
+  });
+});
+
+describe('a resposta vem quebrada em mensagens', () => {
+  const TEXTO = 'A clínica abre de segunda a sexta das oito às dezoito horas.';
+
+  // Ninguém manda parágrafo no WhatsApp. A quebra de linha sempre foi a
+  // fronteira entre as ideias da resposta; era o `limitarLinhas` que as juntava
+  // numa string só, e o resultado tinha cara de formulário.
+  it('uma mensagem por linha, sem as vazias', () => {
+    expect(dividirEmMensagens('Boa noite!\n\nEm que posso ajudar?', 3)).toEqual([
+      'Boa noite!',
+      'Em que posso ajudar?',
+    ]);
+  });
+
+  it('corta no máximo, que é o teto de MENSAGENS por turno', () => {
+    expect(dividirEmMensagens('a\nb\nc\nd', 3)).toEqual(['a', 'b', 'c']);
+  });
+
+  it('`texto` continua sendo a forma juntada, que é a que vai para o banco', () => {
+    // Uma linha de `messages` por TURNO, não por mensagem: senão cada mensagem
+    // contaria como um turno do bot e todo aproveitamento já medido deixaria de
+    // ser comparável.
+    const texto = 'linha um\nlinha dois';
+    expect(limitarLinhas(texto, 3)).toBe(texto);
+    expect(dividirEmMensagens(texto, 3)).toHaveLength(2);
+  });
+
+  it('o motor devolve as duas formas, coerentes entre si', async () => {
+    semear([TEXTO]);
+    const motor = new Motor({
+      db,
+      embedder: new EmbedderFake(),
+      llm: new LlmFake('Abrimos das 8h às 18h.\nQuer que eu veja um horário?'),
+    });
+
+    const r = await motor.responder(SLUG, 'contato-1', 'clínica abre segunda sexta horas');
+
+    expect(r.mensagens).toEqual(['Abrimos das 8h às 18h.', 'Quer que eu veja um horário?']);
+    expect(r.texto).toBe(r.mensagens.join('\n'));
+  });
+
+  it('bot calado por handoff não devolve mensagem nenhuma', async () => {
+    // A borda não pode desenhar balão vazio: `texto` é '' e a lista é vazia.
+    semear([TEXTO]);
+    const motor = new Motor({
+      db,
+      embedder: new EmbedderFake(),
+      llm: new LlmQueDesiste(),
+    });
+
+    await motor.responder(SLUG, 'contato-1', 'vocês vendem pizza calabresa');
+    const r = await motor.responder(SLUG, 'contato-1', 'opa');
+
+    expect(r.aguardandoHumano).toBe(true);
+    expect(r.mensagens).toEqual([]);
   });
 });
 

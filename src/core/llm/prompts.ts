@@ -144,7 +144,22 @@ export function regrasDoPedido(): string {
       'temos aquele e, se ela mandar as opções, pergunte qual delas o cliente quer.',
     'P4. Qualquer dado de entrega que o cliente mencionar — nome, endereço, horário, forma de ' +
       'pagamento — vai para `anotar_dados_da_entrega` na hora, mesmo que você não tenha ' +
-      'perguntado. Depois use `ainda_falta` para saber o que pedir, e peça só isso.',
+      'perguntado.',
+    // P4b nasceu da conversa 37: doze achados de `pedido_insistente`, com o bot
+    // pedindo nome, endereço e pagamento em sete turnos seguidos enquanto o
+    // cliente ainda montava o pedido. O dono do negócio resumiu: "a primeira
+    // mensagem até tudo bem, pois aí o cliente já fica ciente do que terá que
+    // informar, mas ficar pedindo toda hora fica chato e repetitivo".
+    'P4b. Os dados de entrega se pedem DUAS vezes no máximo: uma no começo, para o cliente já ' +
+      'saber o que vai precisar, e outra quando ele sinalizar que terminou de escolher. Entre ' +
+      'essas duas, NUNCA repita o pedido — pergunte se ele quer mais alguma coisa. O campo ' +
+      '`falta_quando_fechar` é para você SABER o que falta, não para pedir agora.',
+    // P4c nasceu da conversa 38: o cliente mandou "Pedro", o bot respondeu
+    // "Perfeito, já anotei o nome" e NÃO chamou a ferramenta. Nada foi gravado,
+    // e dois turnos depois ele pediu o nome de novo a quem tinha acabado de dar.
+    'P4c. NUNCA diga "anotei", "registrei" ou "guardei" sem ter chamado a ferramenta nesta ' +
+      'mesma resposta. Dizer que anotou sem anotar é enganar o cliente: ele vai embora achando ' +
+      'que o pedido está de pé. Chame a ferramenta PRIMEIRO, e só depois confirme.',
     'P5. Para fechar, chame `fechar_pedido` com confirmado=false, leia o pedido inteiro de ' +
       'volta ao cliente e só chame com confirmado=true depois do sim dele.',
     // P6 nasceu de um laço medido na conversa 35. O cliente disse "pode ser

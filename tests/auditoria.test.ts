@@ -125,9 +125,11 @@ describe('pedido repetido', () => {
     expect(tipos(r)).toEqual(['pedido_repetido']);
   });
 
-  it('só AVISA quando o cliente ainda não tinha respondido', () => {
-    // Insistir num dado que ninguém mandou é chato, não é esquecimento. Tratar
-    // os dois como a mesma coisa faria o número perder sentido.
+  it('insistir num dado que ninguém mandou é outro TIPO, e pesa igual', () => {
+    // Insistir não é esquecimento — é pressa —, então o tipo continua separado.
+    // Mas os dois são graves desde 2026-10-03: a conversa 37 tirou 100%
+    // carregando doze `pedido_insistente`, com o bot pedindo nome, endereço e
+    // pagamento em sete turnos seguidos enquanto o cliente ainda escolhia.
     const r = auditar([
       cliente('quero marcar'),
       bot('Me manda seu nome completo, por favor.'),
@@ -136,7 +138,51 @@ describe('pedido repetido', () => {
     ]);
 
     expect(tipos(r)).toEqual(['pedido_insistente']);
-    expect(r.problemas[0]?.grave).toBe(false);
+    expect(r.problemas[0]?.grave).toBe(true);
+    expect(r.aproveitamento).toBe(0.5);
+  });
+
+  it('ESTREITAR a lista não é insistir', () => {
+    // Medido na conversa 38, na fase de fechamento: o cliente entrega um dado
+    // por mensagem e o bot responde "falta só o horário e a forma de pagamento",
+    // depois "falta só o horário". Pedir MENOS a cada volta é progresso, e
+    // acusar isso marcaria como defeito a única forma honesta de o bot dizer
+    // onde a conversa está.
+    const r = auditarVenda([
+      cliente('so isso'),
+      bot(
+        'Me passa o nome de quem recebe, o endereço completo, o horário que fica melhor e a ' +
+          'forma de pagamento.',
+        0.5,
+        true,
+      ),
+      cliente('Rua antonio, 384'),
+      bot(
+        'Anotei o endereço. Falta o nome de quem recebe, o horário que fica melhor e a forma ' +
+          'de pagamento.',
+        0.5,
+        true,
+      ),
+      cliente('Pedro'),
+      bot('Anotei o nome. Falta o horário que fica melhor e a forma de pagamento.', 0.5, true),
+      cliente('pix'),
+      bot('Anotei o Pix. Falta o horário que fica melhor.', 0.5, true),
+    ]);
+
+    expect(tipos(r).filter((t) => t === 'pedido_insistente')).toEqual([]);
+  });
+
+  it('mas repetir o MESMO conjunto continua sendo insistência', () => {
+    // É a conversa 37: os mesmos quatro campos, turno após turno, enquanto o
+    // cliente ainda escolhia os itens. Onze achados.
+    const r = auditarVenda([
+      cliente('quero 2 kg de acai'),
+      bot('Me passa o nome de quem recebe, o endereço e a forma de pagamento.', 0.5, true),
+      cliente('e 1 kg de goiaba'),
+      bot('Me passa o nome de quem recebe, o endereço e a forma de pagamento.', 0.5, true),
+    ]);
+
+    expect(tipos(r).filter((t) => t === 'pedido_insistente')).toHaveLength(3);
   });
 
   it('NÃO acusa o primeiro pedido', () => {
@@ -400,6 +446,45 @@ describe('não somou o pedido', () => {
     ]);
 
     expect(tipos(r)).toEqual([]);
+  });
+});
+
+describe('disse que anotou e não anotou', () => {
+  it('ACUSA "já anotei" sem chamada de ferramenta', () => {
+    // Conversa 38: o cliente mandou "Pedro", o bot respondeu "Perfeito, já
+    // anotei o nome" com `used_tool = 0`, e nada foi gravado. Dois turnos
+    // depois a ferramenta disse que o nome faltava e ele pediu de novo a quem
+    // tinha acabado de dar. É o pior tipo de defeito: o texto tranquiliza e o
+    // estado está errado.
+    const r = auditarVenda([
+      cliente('quero 2 kg de acai'),
+      bot('Até agora são 2 kg de açaí, R$ 70,00. Quer mais alguma coisa?', 0.6, true),
+      cliente('Pedro'),
+      bot('Perfeito, já anotei o nome.', 0.38, false),
+    ]);
+
+    expect(tipos(r)).toContain('afirmou_ter_anotado');
+    expect(r.problemas.find((p) => p.tipo === 'afirmou_ter_anotado')?.grave).toBe(true);
+  });
+
+  it('NÃO acusa quando a ferramenta foi chamada', () => {
+    const r = auditarVenda([
+      cliente('Pedro, rua das flores 120'),
+      bot('Perfeito, já anotei o nome e o endereço.', 0.4, true),
+    ]);
+
+    expect(tipos(r).filter((t) => t === 'afirmou_ter_anotado')).toEqual([]);
+  });
+
+  it('NÃO acusa na clínica, onde "anotei" é jeito de falar', () => {
+    // Lá o bot coleta nome e telefone na conversa e grava tudo de uma vez no
+    // `criar_agendamento`. Não existe ferramenta cujo trabalho seja anotar.
+    const r = auditar([
+      cliente('gabriel abraao possas borges'),
+      bot('Perfeito, já anotei. Qual horário você prefere?', 0.5, false),
+    ]);
+
+    expect(tipos(r).filter((t) => t === 'afirmou_ter_anotado')).toEqual([]);
   });
 });
 

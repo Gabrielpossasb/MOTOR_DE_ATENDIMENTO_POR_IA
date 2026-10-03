@@ -24,7 +24,13 @@ import { classificarTurnoSocial } from './turno-social.js';
 export type TipoDeProblema =
   /** Pediu um dado que a conversa JÁ tinha. É o defeito que o cliente sente. */
   | 'pedido_repetido'
-  /** Pediu o mesmo dado de novo, mas o cliente ainda não tinha respondido. */
+  /**
+   * Pediu o mesmo dado de novo, mas o cliente ainda não tinha respondido.
+   *
+   * Insistir num dado que ninguém mandou não é esquecimento — é pressa. Continua
+   * sendo um tipo separado de `pedido_repetido` por isso, mas os dois pesam
+   * igual: para quem está conversando, as duas situações são a mesma chatice.
+   */
   | 'pedido_insistente'
   /** Afirmou número, preço ou horário sem nenhum trecho acima do limiar. */
   | 'afirmou_com_contexto_fraco'
@@ -37,7 +43,9 @@ export type TipoDeProblema =
   /** Pediu endereço ou pagamento antes de existir pedido na conversa. */
   | 'pediu_dado_cedo_demais'
   /** O cliente pediu o total e a resposta não traz valor nenhum. */
-  | 'nao_somou';
+  | 'nao_somou'
+  /** Disse ao cliente que anotou algo, sem ter chamado a ferramenta que anota. */
+  | 'afirmou_ter_anotado';
 
 export interface ProblemaDaConversa {
   tipo: TipoDeProblema;
@@ -103,7 +111,10 @@ const DADOS: DadoDoAtendimento[] = [
   {
     id: 'nome',
     rotulo: 'o nome',
-    pedido: /nome completo|seu nome|qual (é |e )?o seu nome/i,
+    // "o nome de quem recebe" é como este bot pede o nome numa entrega, e o
+    // padrão antigo não casava com isso: a conversa 37 pediu o nome em sete
+    // turnos seguidos e NENHUM apareceu no relatório.
+    pedido: /nome completo|seu nome|nome de quem (recebe|vai receber)|qual (é |e )?o seu nome/i,
     // Nome não tem formato. O que dá para reconhecer é a FORMA da mensagem: só
     // letras, duas palavras ou mais, sem pergunta. Isso pega "maria silva" e
     // pegaria "tudo certo" também, e é por isso que existe a lista de aberturas
@@ -137,7 +148,10 @@ const DADOS: DadoDoAtendimento[] = [
   {
     id: 'horario',
     rotulo: 'o horário',
-    pedido: /qual (o )?hor[áa]rio|que hor[áa]rio|hor[áa]rio (que |voc[êe] )?prefer|qual hora/i,
+    // "horário que fica melhor" é a forma que o prompt da entrega manda usar,
+    // justamente para não prometer horário. Faltava no padrão.
+    pedido:
+      /qual (o )?hor[áa]rio|que hor[áa]rio|hor[áa]rio (que |voc[êe] )?prefer|hor[áa]rio que (fica|for|seria) melhor|qual hora/i,
     fornecido: /\d{1,2}\s*[:h]\s*\d{0,2}|[àa]s \d{1,2}|de manh[ãa]|[àa] tarde|meio[- ]dia/i,
     infereDaRespostaDoBot: true,
   },
@@ -233,6 +247,21 @@ const PEDE_TOTAL =
 
 /** A resposta traz algum valor em reais. */
 const TEM_VALOR = /r\$\s*\d/i;
+
+/**
+ * O bot AFIRMA ter gravado algo.
+ *
+ * Medido na conversa 38: o cliente mandou `"Pedro"`, o bot respondeu *"Perfeito,
+ * já anotei o nome"* e `used_tool = 0` — ele não chamou `anotar_dados_da_entrega`
+ * e nada foi gravado. Dois turnos depois a ferramenta informou que o nome
+ * faltava, e o bot pediu o nome de novo a quem tinha acabado de dar.
+ *
+ * É o pior tipo de defeito deste sistema, pela mesma razão do handoff
+ * parafraseado: o texto tranquiliza o cliente e o estado está errado. Se ele
+ * disse que anotou, tem de estar anotado.
+ */
+const AFIRMOU_ANOTAR =
+  /\b(j[áa] )?(anotei|anotado|anotada|registrei|registrado|guardei|salvei|ficou guardado)\b/i;
 
 /**
  * Uma quantidade de produto apareceu na conversa.
@@ -429,6 +458,8 @@ export function auditarConversa(
   let houveQuantidade = false;
   /** A última mensagem do cliente entregou algum dado do atendimento? */
   let clienteEntregouDado = false;
+  /** O que o bot pediu no turno anterior. Serve para reconhecer ESTREITAMENTO. */
+  let pedidosDoTurnoAnterior = new Set<string>();
 
   let turno = 0;
 
@@ -460,7 +491,27 @@ export function auditarConversa(
       });
     };
 
-    for (const id of dadosPedidosEm(mensagem.conteudo)) {
+    const pedidosDesteTurno = dadosPedidosEm(mensagem.conteudo);
+
+    /**
+     * O bot está ESTREITANDO a lista, não insistindo.
+     *
+     * Medido na conversa 38, na fase de fechamento: o cliente entrega um dado
+     * por mensagem e o bot responde "falta só o horário e a forma de pagamento",
+     * depois "falta só o horário". Pedir menos a cada volta é progresso, e
+     * acusar isso marcaria como defeito a única forma honesta de o bot dizer
+     * onde a conversa está.
+     *
+     * A insistência que incomoda é a da conversa 37: o MESMO conjunto de quatro
+     * campos, turno após turno, enquanto o cliente ainda escolhia os itens.
+     * Conjunto igual continua sendo acusado; conjunto menor, não.
+     */
+    const estreitando =
+      pedidosDesteTurno.size > 0 &&
+      pedidosDesteTurno.size < pedidosDoTurnoAnterior.size &&
+      [...pedidosDesteTurno].every((p) => pedidosDoTurnoAnterior.has(p));
+
+    for (const id of pedidosDesteTurno) {
       const dado = DADOS.find((d) => d.id === id);
       if (!dado) continue;
 
@@ -470,10 +521,15 @@ export function auditarConversa(
           grave: true,
           detalhe: `pediu ${dado.rotulo}, que a conversa já tinha`,
         });
-      } else if (jaPedido.has(id)) {
+      } else if (jaPedido.has(id) && !estreitando) {
+        // GRAVE desde 2026-10-03, por decisão de produto. Era aviso, e a
+        // conversa 37 tirou 100% carregando DOZE deles: o bot pediu nome,
+        // endereço e pagamento em sete turnos seguidos enquanto o cliente ainda
+        // escolhia os itens. É a coisa que mais incomoda quem conversa hoje, e
+        // métrica que não dói não serve para saber se o conserto funcionou.
         registrar({
           tipo: 'pedido_insistente',
-          grave: false,
+          grave: true,
           detalhe: `pediu ${dado.rotulo} de novo; o cliente ainda não tinha respondido`,
         });
       }
@@ -493,6 +549,11 @@ export function auditarConversa(
 
       jaPedido.add(id);
     }
+
+    // Só turnos em que o bot pediu ALGO contam como referência. Uma resposta que
+    // não pede nada no meio do fechamento não pode zerar a comparação e fazer o
+    // pedido seguinte parecer insistência.
+    if (pedidosDesteTurno.size > 0) pedidosDoTurnoAnterior = pedidosDesteTurno;
 
     // O bot também informa dado: quando ele mesmo diz a data, a conversa passa
     // a saber. Foi assim no caso medido — ele ofereceu "sexta (02/10)" e depois
@@ -517,6 +578,24 @@ export function auditarConversa(
         tipo: 'nao_somou',
         grave: true,
         detalhe: 'o cliente pediu o total e a resposta não trouxe valor nenhum',
+      });
+    }
+
+    // Disse que anotou, sem ter chamado a ferramenta que anota.
+    //
+    // Só vale para quem VENDE porque só aí existe a ferramenta cujo trabalho é
+    // exatamente gravar o dado. Na clínica o bot coleta nome e telefone na
+    // conversa e grava tudo de uma vez no `criar_agendamento`; ali "anotei" é
+    // jeito de falar, não afirmação sobre um registro.
+    if (
+      opcoes.vende === true &&
+      !mensagem.usouFerramenta &&
+      AFIRMOU_ANOTAR.test(mensagem.conteudo)
+    ) {
+      registrar({
+        tipo: 'afirmou_ter_anotado',
+        grave: true,
+        detalhe: 'disse ao cliente que anotou, mas não chamou nenhuma ferramenta',
       });
     }
 

@@ -143,6 +143,9 @@ export class Motor {
     if (conversa && conversa.status === 'handoff' && config.conversa.bloquearBotAposHandoff) {
       return {
         texto: '',
+        // Nenhuma mensagem a enviar: o bot esta calado de proposito. A borda nao
+        // desenha balao nenhum, so a acao de trazer o bot de volta.
+        mensagens: [],
         fontes: [],
         precisaDeHumano: true,
         motivoDoHandoff: 'aguardando_humano',
@@ -443,6 +446,7 @@ export class Motor {
 
     return {
       texto,
+      mensagens: dividirEmMensagens(texto, ajustes.maximoDeLinhas),
       fontes,
       precisaDeHumano: desistiu,
       ...(desistiu ? { motivoDoHandoff: 'baixa_confianca' as const } : {}),
@@ -556,6 +560,7 @@ export class Motor {
     if (!conversa || conversa.status !== 'handoff') {
       return {
         texto: config.resposta.fraseDeRetomada,
+        mensagens: [config.resposta.fraseDeRetomada],
         fontes: [],
         precisaDeHumano: false,
         melhorScore: 0,
@@ -581,6 +586,7 @@ export class Motor {
 
     return {
       texto,
+      mensagens: [texto],
       fontes: [],
       precisaDeHumano: false,
       melhorScore: 0,
@@ -660,6 +666,7 @@ export class Motor {
 
     return {
       texto,
+      mensagens: dividirEmMensagens(texto, configEfetiva(dados.tenant).maximoDeLinhas),
       fontes: [],
       precisaDeHumano: desistiu,
       ...(desistiu ? { motivoDoHandoff: 'baixa_confianca' as const } : {}),
@@ -718,6 +725,7 @@ export class Motor {
 
     return {
       texto,
+      mensagens: [texto],
       fontes: [],
       precisaDeHumano: true,
       motivoDoHandoff: dados.motivo,
@@ -802,16 +810,37 @@ function paraFontes(resultados: ResultadoDeBusca[]): Fonte[] {
 }
 
 /**
- * Corta a resposta no número máximo de linhas.
+ * Quebra a resposta nas mensagens que o canal vai enviar, uma por linha.
  *
- * É a última barreira: o prompt já pede resposta curta, mas o custo de uma
- * mensagem longa no WhatsApp é real demais para depender só do modelo obedecer.
+ * A quebra de linha SEMPRE foi a fronteira entre as ideias da resposta — o
+ * modelo já separava assim, e era o `limitarLinhas` que juntava tudo de volta
+ * numa string só. Quem conversou com o bot resumiu o efeito: *"se não, a
+ * mensagem fica muito grande e artificial"*. Ninguém manda parágrafo no
+ * WhatsApp.
+ *
+ * Então a fronteira passa a ser respeitada, e quem decide a FORMA é a borda:
+ * balão por mensagem na página, mensagens separadas no WhatsApp, linhas no
+ * terminal. O núcleo continua sem saber o que é um balão.
+ *
+ * O corte no máximo é a última barreira: o prompt pede resposta curta, e
+ * depender só de o modelo obedecer já falhou antes neste projeto.
  */
-export function limitarLinhas(texto: string, maximo: number): string {
-  const linhas = texto
+export function dividirEmMensagens(texto: string, maximo: number): string[] {
+  return texto
     .split('\n')
     .map((l) => l.trim())
-    .filter((l) => l.length > 0);
+    .filter((l) => l.length > 0)
+    .slice(0, maximo);
+}
 
-  return linhas.slice(0, maximo).join('\n');
+/**
+ * A resposta como texto único, com as mensagens separadas por `\n`.
+ *
+ * Continua existindo porque é o que vai para o BANCO, e é de propósito: uma
+ * linha por turno. Se cada mensagem virasse uma linha de `messages`, cada uma
+ * contaria como um turno do bot e todo aproveitamento já medido deixaria de ser
+ * comparável — e a auditoria já trata `\n` como separador de frase.
+ */
+export function limitarLinhas(texto: string, maximo: number): string {
+  return dividirEmMensagens(texto, maximo).join('\n');
 }

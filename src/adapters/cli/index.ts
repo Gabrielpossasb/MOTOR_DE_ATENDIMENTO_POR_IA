@@ -114,7 +114,12 @@ function imprimirResposta(resposta: RespostaDoBot): void {
     return;
   }
 
-  console.log(`${cores.verde('bot:')} ${resposta.texto}`);
+  // Uma linha por MENSAGEM, com o rótulo repetido: é o que mais se parece com
+  // o que o cliente vai ver no WhatsApp, onde cada uma chega separada. O
+  // terminal é só outra forma da mesma lista que o núcleo devolveu.
+  for (const mensagem of resposta.mensagens) {
+    console.log(`${cores.verde('bot:')} ${mensagem}`);
+  }
 
   if (resposta.precisaDeHumano) {
     console.log(cores.amarelo(`     [handoff: ${resposta.motivoDoHandoff}]`));

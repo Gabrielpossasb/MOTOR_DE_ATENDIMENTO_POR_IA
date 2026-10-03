@@ -225,6 +225,35 @@
         rolarParaOFim();
       }
 
+      /**
+       * Desenha a resposta do bot como VARIAS mensagens, uma por balao.
+       *
+       * O nucleo devolve `mensagens` ja quebrada, e nao sabe o que e um balao --
+       * no WhatsApp a mesma lista vira mensagens separadas. Aqui elas entram
+       * ESPACADAS, com o "digitando..." entre uma e outra: quatro baloes
+       * aparecendo de uma vez e tao artificial quanto um paragrafo longo, que e
+       * o problema que isto existe para resolver.
+       *
+       * A meta (custo, score, fontes) vai so no ULTIMO balao, porque e do turno
+       * inteiro e nao de cada mensagem.
+       */
+      async function adicionarRespostaDoBot(mensagens, meta) {
+        for (let i = 0; i < mensagens.length; i++) {
+          const ultima = i === mensagens.length - 1;
+          adicionarBalao(mensagens[i], 'bot', ultima ? meta : undefined);
+
+          if (!ultima) {
+            mostrarDigitando();
+            // Proporcional ao tamanho da proxima mensagem, com piso e teto: uma
+            // linha curta nao merece a mesma pausa que um recapitulativo.
+            const proxima = mensagens[i + 1] || '';
+            const pausa = Math.min(1400, Math.max(500, proxima.length * 18));
+            await new Promise((resolve) => setTimeout(resolve, pausa));
+            esconderDigitando();
+          }
+        }
+      }
+
       function adicionarAviso(texto) {
         const aviso = document.createElement('div');
         aviso.className = 'aviso';
@@ -279,7 +308,9 @@
           }
 
           caixa.remove();
-          adicionarBalao(dados.texto, 'bot');
+          await adicionarRespostaDoBot(
+            dados.mensagens && dados.mensagens.length > 0 ? dados.mensagens : [dados.texto],
+          );
           elEntrada.focus();
         } catch (erro) {
           adicionarAviso('Falha de rede: ' + erro.message);
@@ -360,7 +391,11 @@
             return;
           }
 
-          adicionarBalao(dados.texto, 'bot', formatarMeta(dados));
+          // `mensagens` pode faltar numa resposta antiga em cache: cai no texto.
+          await adicionarRespostaDoBot(
+            dados.mensagens && dados.mensagens.length > 0 ? dados.mensagens : [dados.texto],
+            formatarMeta(dados),
+          );
 
           if (dados.precisaDeHumano) {
             adicionarAviso('Handoff registrado (' + dados.motivoDoHandoff + '). A equipe foi acionada.');

@@ -390,7 +390,39 @@ describe('as ferramentas', () => {
     expect(r.ok).toBe(true);
     expect(r.itens).toHaveLength(2);
     expect(r.total).toBe('R$ 75,00');
-    expect(r.ainda_falta).toContain('o nome de quem recebe');
+  });
+
+  it('ADICIONAR item não entrega lista de pendência, e proíbe pedir os dados', () => {
+    // O defeito da conversa 37: todo resultado trazia `ainda_falta`, e o modelo
+    // pedia nome, endereço e pagamento a cada item — sete turnos seguidos, doze
+    // achados de `pedido_insistente`. O prompt mandava o contrário e perdia,
+    // porque dado concreto na mão do modelo ganha de regra abstrata.
+    const r = chamar('adicionar_ao_pedido', { produto: 'pão de queijo', quantidade: 2 });
+
+    expect(r.ainda_falta).toBeUndefined();
+    // Ele continua SABENDO o que falta — é o que impede pedir o que já tem.
+    expect(r.falta_quando_fechar).toContain('o nome de quem recebe');
+    expect(String(r.instrucao)).toContain('NÃO peça nome, endereço nem forma de pagamento agora');
+    expect(String(r.instrucao)).toContain('mais alguma coisa');
+  });
+
+  it('mas quando o cliente ENTREGA um dado, aí sim pede o que falta', () => {
+    // Quem acabou de mandar o endereço está fechando. A ferramenta sabe disso
+    // sem adivinhar intenção: foi `anotar_dados_da_entrega` que o modelo chamou.
+    chamar('adicionar_ao_pedido', { produto: 'pão de queijo', quantidade: 2 });
+    const r = chamar('anotar_dados_da_entrega', { endereco: 'Rua A, 1' });
+
+    expect(r.ainda_falta).toContain('a forma de pagamento');
+    expect(String(r.instrucao)).toContain('hora de fechar');
+    expect(String(r.instrucao)).toContain('NÃO repita');
+  });
+
+  it('`ver_pedido` responde a pergunta sem cobrar os dados', () => {
+    chamar('adicionar_ao_pedido', { produto: 'pão de queijo', quantidade: 2 });
+    const r = chamar('ver_pedido');
+
+    expect(r.ainda_falta).toBeUndefined();
+    expect(String(r.instrucao)).toContain('NÃO peça os dados de entrega nesta mensagem');
   });
 
   it('`ver_pedido` com carrinho vazio manda perguntar, e cita o catálogo', () => {

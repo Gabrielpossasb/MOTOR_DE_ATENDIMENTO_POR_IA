@@ -176,7 +176,9 @@ export function executarFerramentaDoPedido(
       }
 
       const pedido = comTaxa(ctx.db, atual.id, catalogo);
-      return pedido ? respostaDoPedido(pedido) : JSON.stringify({ ok: false, erro: 'pedido ilegível' });
+      return pedido
+        ? respostaDoPedido(pedido, 'conferindo')
+        : JSON.stringify({ ok: false, erro: 'pedido ilegível' });
     }
 
     case 'adicionar_ao_pedido': {
@@ -188,12 +190,16 @@ export function executarFerramentaDoPedido(
       }
 
       const r = adicionarItem(contexto, produto, quantidade);
-      return r.ok ? respostaDoPedido(r.valor) : JSON.stringify({ ok: false, erro: r.motivo });
+      return r.ok
+        ? respostaDoPedido(r.valor, 'escolhendo')
+        : JSON.stringify({ ok: false, erro: r.motivo });
     }
 
     case 'remover_do_pedido': {
       const r = removerItem(contexto, texto(argumentos.produto));
-      return r.ok ? respostaDoPedido(r.valor) : JSON.stringify({ ok: false, erro: r.motivo });
+      return r.ok
+        ? respostaDoPedido(r.valor, 'escolhendo')
+        : JSON.stringify({ ok: false, erro: r.motivo });
     }
 
     case 'anotar_dados_da_entrega': {
@@ -208,7 +214,11 @@ export function executarFerramentaDoPedido(
           : {}),
       });
 
-      return r.ok ? respostaDoPedido(r.valor) : JSON.stringify({ ok: false, erro: r.motivo });
+      // O cliente acabou de ENTREGAR um dado de entrega: ele está fechando, e
+      // aí pedir o que ainda falta é a coisa certa.
+      return r.ok
+        ? respostaDoPedido(r.valor, 'fechando')
+        : JSON.stringify({ ok: false, erro: r.motivo });
     }
 
     case 'fechar_pedido': {
@@ -251,16 +261,35 @@ export function executarFerramentaDoPedido(
 }
 
 /**
+ * Em que momento do atendimento esta chamada aconteceu.
+ *
+ * Não é adivinhação de intenção: QUAL ferramenta o modelo chamou já diz o que o
+ * cliente acabou de fazer. Quem acabou de adicionar um item está escolhendo;
+ * quem entregou um dado de entrega está fechando.
+ */
+type Momento = 'escolhendo' | 'conferindo' | 'fechando';
+
+/**
  * O pedido como o modelo vai ler.
  *
- * Vai junto o que AINDA FALTA, e isso é metade do valor da ferramenta: o modelo
- * não precisa deduzir do histórico o que já tem — ele lê. É o que impede o
- * pedido repetido de um dado que o cliente já deu.
+ * O NOME do campo que lista o que falta muda com o momento, e isso não é
+ * estética — é a correção de um defeito medido. Até 2026-10-03 todo resultado
+ * trazia `ainda_falta` junto com "não peça de novo nada que esteja em
+ * `ja_anotado`". Lido por um modelo, isso é uma lista de pendências entregue na
+ * mão a cada item adicionado, mais uma autorização implícita para pedir todo o
+ * resto. Na conversa 37 ele pediu nome, endereço e pagamento em SETE turnos
+ * seguidos enquanto o cliente ainda escolhia — doze achados de
+ * `pedido_insistente`.
+ *
+ * E o prompt mandava o contrário: a etapa 3 dizia "enquanto ele estiver somando
+ * itens, pergunte se quer mais alguma coisa". A regra perdeu porque **dado
+ * concreto na mão do modelo ganha de regra abstrata no prompt**. Então o
+ * conserto é no dado.
  */
-function respostaDoPedido(pedido: Pedido): string {
+function respostaDoPedido(pedido: Pedido, momento: Momento): string {
   const falta = faltaParaFechar(pedido);
 
-  return JSON.stringify({
+  const comum = {
     ok: true,
     itens: pedido.itens.map((i) => ({
       produto: i.rotulo,
@@ -276,12 +305,41 @@ function respostaDoPedido(pedido: Pedido): string {
       : emReais(pedido.taxaCentavos),
     total: emReais(pedido.totalCentavos),
     ja_anotado: pedido.dados,
-    ainda_falta: falta,
-    instrucao: pedido.taxaIndefinida
-      ? 'O pedido tem item vendido por volume, e a taxa de entrega é por peso: NÃO afirme a ' +
-        'taxa. Avise que vai confirmar e chame `avisar_responsavel`. O TOTAL acima é sem taxa.'
-      : 'Use estes valores exatamente como estão. Não recalcule e não peça de novo nada que ' +
-        'esteja em `ja_anotado`.',
+  };
+
+  const valores = pedido.taxaIndefinida
+    ? 'O pedido tem item vendido por volume, e a taxa de entrega é por peso: NÃO afirme a ' +
+      'taxa. Avise que vai confirmar e chame `avisar_responsavel`. O TOTAL acima é sem taxa.'
+    : 'Use estes valores exatamente como estão e não recalcule.';
+
+  if (momento === 'fechando') {
+    return JSON.stringify({
+      ...comum,
+      ainda_falta: falta,
+      instrucao:
+        `${valores} ` +
+        'Agora é hora de fechar: peça de uma vez só o que está em `ainda_falta`, e nada além ' +
+        'disso. Se você já pediu e o cliente não respondeu, NÃO repita o pedido — siga o ' +
+        'atendimento e volte a isso depois.',
+    });
+  }
+
+  // `falta_quando_fechar` em vez de `ainda_falta`: o mesmo dado, com um nome que
+  // se lê como informação e não como tarefa. O modelo precisa SABER o que falta
+  // (é o que impede ele de pedir o que já tem) sem ser empurrado a pedir agora.
+  return JSON.stringify({
+    ...comum,
+    falta_quando_fechar: falta,
+    instrucao:
+      momento === 'escolhendo'
+        ? `${valores} ` +
+          'O cliente acabou de mexer no pedido, ou seja, ainda está escolhendo. Confirme o que ' +
+          'entrou e pergunte se ele quer mais alguma coisa. NÃO peça nome, endereço nem forma ' +
+          'de pagamento agora: você já avisou no começo o que vai precisar, e pedir a cada item ' +
+          'deixa a conversa repetitiva e apressada.'
+        : `${valores} ` +
+          'Responda o que o cliente perguntou. Se ele não pediu para fechar, NÃO peça os dados ' +
+          'de entrega nesta mensagem.',
   });
 }
 

@@ -28,8 +28,13 @@ import {
 import type { RespostaDoBot } from '../src/core/types.js';
 
 function resposta(parcial: Partial<RespostaDoBot> = {}): RespostaDoBot {
+  const texto = parcial.texto ?? 'Aos sábados, o atendimento é das 8h às 12h.';
+
   return {
-    texto: 'Aos sábados, o atendimento é das 8h às 12h.',
+    texto,
+    // As regras de avaliação julgam o TEXTO do turno, não as mensagens
+    // separadas: é a mesma coisa que vai para o log e para o banco.
+    mensagens: texto.split('\n').filter((l) => l.trim().length > 0),
     fontes: [{ arquivo: 'horarios.txt', secao: 'Horário de atendimento', score: 0.57 }],
     precisaDeHumano: false,
     melhorScore: 0.57,

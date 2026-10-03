@@ -196,13 +196,30 @@ export const config = {
      */
     agrupamento: {
       ativo: true,
-      /** Silêncio necessário para fechar o turno. Reinicia a cada mensagem. */
-      esperaMs: 2500,
+      /**
+       * Silêncio necessário para fechar o turno. Reinicia a cada mensagem.
+       *
+       * Subiu de 2,5s para 10s em 2026-10-03, por decisão de produto: 2,5s não
+       * dava tempo de o cliente escrever a segunda mensagem, e o bot respondia a
+       * um pedido pela metade.
+       *
+       * O preço é cobrado de TODO turno, inclusive o de mensagem única — que é
+       * a maioria. Com ~3s de geração, uma pergunta solta passa a levar ~13s
+       * para ser respondida. Foi escolhido assim de propósito: cadência igual
+       * para todos, sem heurística de "a frase parece completa", que erraria
+       * justamente com quem escreve sem pontuação.
+       */
+      esperaMs: 10000,
       /**
        * Teto desde a primeira mensagem do lote. Sem ele, quem digita sem
        * parar nunca receberia resposta.
+       *
+       * Precisa ser bem maior que `esperaMs`, senão deixa de ser rede de
+       * segurança e passa a CORTAR o agrupamento: com espera de 10s e teto de
+       * 12s, a segunda mensagem reiniciava o contador e o teto estourava 2s
+       * depois, no meio do lote.
        */
-      esperaMaximaMs: 12000,
+      esperaMaximaMs: 30000,
     },
     /**
      * Conversa passada a um humano não volta a ser respondida pelo bot.

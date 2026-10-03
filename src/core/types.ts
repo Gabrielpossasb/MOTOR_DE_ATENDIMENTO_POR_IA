@@ -153,7 +153,26 @@ export interface AcaoSugerida {
 
 /** O que o núcleo devolve para qualquer adaptador. */
 export interface RespostaDoBot {
+  /**
+   * A resposta inteira num texto só, com as mensagens separadas por `\n`.
+   *
+   * É o que vai para o banco e para os logs — uma linha por turno, para a
+   * auditoria e o aproveitamento continuarem comparáveis com tudo que já foi
+   * medido. Para ENVIAR, use `mensagens`.
+   */
   texto: string;
+  /**
+   * A resposta quebrada nas mensagens que o canal deve enviar.
+   *
+   * Existe porque ninguém manda parágrafo no WhatsApp: a quebra de linha sempre
+   * foi a fronteira entre as ideias da resposta, e juntá-las numa mensagem só
+   * deixava o bot com cara de formulário. Cada borda escolhe a forma — balão na
+   * página, mensagem no WhatsApp, linha no terminal — e o núcleo continua sem
+   * saber o que é um balão.
+   *
+   * Vazio quando o bot deliberadamente não respondeu (conversa em handoff).
+   */
+  mensagens: string[];
   fontes: Fonte[];
   /** true quando o bot desistiu e pediu ajuda humana. */
   precisaDeHumano: boolean;
