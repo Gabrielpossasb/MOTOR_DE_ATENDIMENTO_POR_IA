@@ -1,0 +1,12 @@
+-- A taxa de entrega COBRADA fica gravada no pedido fechado.
+--
+-- A 007 copiou `unit_price_cents` para o item com a justificativa de que o
+-- pedido e registro historico: mexer no produtos.json nao pode reescrever o
+-- preco de uma venda ja feita. A taxa estava de fora e merece o mesmo
+-- tratamento pelo mesmo argumento -- se o minimo de entrega gratis mudar de 2
+-- para 3 kg, um pedido fechado no mes passado passaria a mostrar outra taxa no
+-- painel, e a dona do negocio veria um total que nunca existiu.
+--
+-- NULL em rascunho de proposito: enquanto o pedido esta sendo montado a taxa
+-- muda a cada item, e recalcular e o certo. Ela congela no fechamento.
+ALTER TABLE orders ADD COLUMN delivery_fee_cents INTEGER;

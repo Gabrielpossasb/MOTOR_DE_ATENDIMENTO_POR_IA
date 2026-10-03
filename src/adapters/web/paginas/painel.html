@@ -256,6 +256,9 @@
     <div class="conteudo">
       <div class="cartoes" id="cartoes"></div>
 
+      <h2>Pedidos para entregar</h2>
+      <div id="pedidos"></div>
+
       <h2>Avisos para voce</h2>
       <div id="alertas"></div>
 
@@ -299,6 +302,13 @@
         return 'US$ ' + valor.toFixed(6);
       }
 
+      // Preco que o CLIENTE paga, em reais e com duas casas. Separado de
+      // `moeda`, que e o custo de API em dolar com seis casas -- misturar os
+      // dois mostraria "R$ 110,000000" para o cliente.
+      function reais(centavos) {
+        return 'R$ ' + (centavos / 100).toFixed(2).replace('.', ',');
+      }
+
       function cartao(rotulo, valor, nota) {
         return (
           '<div class="cartao"><div class="rotulo">' +
@@ -334,7 +344,42 @@
           cartao('Sem resposta', p.perguntasSemResposta.length, 'buracos na base de conhecimento'),
           cartao('Lembretes na fila', p.lembretesPendentes.length, 'esperando o comando de envio'),
           cartao('Avisos para voce', p.alertasPendentes.length, 'decisoes esperando voce'),
+          cartao('Pedidos fechados', p.pedidosConfirmados.length, 'para separar e entregar'),
         ].join('');
+
+        // Pedidos fechados: o que a dona do negocio precisa separar. O HORARIO
+        // aqui e o que o CLIENTE pediu, nunca um horario confirmado -- quem
+        // confirma e ela, e a coluna do banco se chama `preferred_time` para
+        // ninguem conseguir gravar promessa por acidente.
+        const pedidos = p.pedidosConfirmados;
+        document.getElementById('pedidos').innerHTML =
+          pedidos.length === 0
+            ? '<div class="vazio">Nenhum pedido fechado ainda.</div>'
+            : '<table><thead><tr><th>Quem recebe</th><th>Endereco</th><th>Itens</th>' +
+              '<th>Total</th><th>Horario pedido</th><th>Pagamento</th></tr></thead><tbody>' +
+              pedidos
+                .map(
+                  (o) =>
+                    '<tr><td>' +
+                    escapar(o.dados.nome || '-') +
+                    '</td><td class="truncar">' +
+                    escapar(o.dados.endereco || '-') +
+                    '</td><td>' +
+                    o.itens
+                      .map((i) => escapar(i.quantidade + ' x ' + i.rotulo))
+                      .join('<br />') +
+                    '</td><td><strong>' +
+                    reais(o.totalCentavos) +
+                    '</strong>' +
+                    (o.taxaCentavos > 0 ? '<br /><span class="rodape">entrega inclusa</span>' : '') +
+                    '</td><td><span class="etiqueta handoff">a confirmar</span><br />' +
+                    escapar(o.dados.horarioDesejado || '-') +
+                    '</td><td>' +
+                    escapar(o.dados.formaDePagamento || '-') +
+                    '</td></tr>',
+                )
+                .join('') +
+              '</tbody></table>';
 
         // Handoffs pendentes: a fila do colaborador. "bot voltou" quer dizer
         // que o cliente tocou em "falar com o atendente virtual" e seguiu

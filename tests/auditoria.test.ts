@@ -580,6 +580,35 @@ describe('repetiu informação', () => {
     expect(tipos(r).filter((t) => t === 'repetiu_informacao')).toEqual([]);
   });
 
+  it('NÃO acusa o recapitulativo que veio da FERRAMENTA', () => {
+    // Medido na conversa 36, a primeira venda fechada de ponta a ponta: os três
+    // achados graves eram o "Até agora são..." repetido a cada item novo — ou
+    // seja, exatamente o recapitulativo de pedido que esta frente existe para
+    // criar. Número que sai da ferramenta é o ESTADO do pedido, não um aviso de
+    // prateleira. Mesmo raciocínio que já vale para `afirmou_com_contexto_fraco`.
+    const r = auditarVenda([
+      cliente('2 pacotes de pao de queijo'),
+      bot('Até agora são 2 pacotes de pão de queijo, R$ 50,00.', 0.58, true),
+      cliente('a entrega sera cobrada?'),
+      bot('Não, com 2 kg a entrega é grátis. Até agora são 2 pacotes de pão de queijo, R$ 50,00.', 0.59, true),
+    ]);
+
+    expect(tipos(r).filter((t) => t === 'repetiu_informacao')).toEqual([]);
+  });
+
+  it('mas o aviso de catálogo SEM ferramenta continua acusado', () => {
+    // A guarda acima não pode virar desculpa geral. O caso da conversa 33 saiu
+    // dos documentos, com `used_tool = 0`, e tem de continuar aparecendo.
+    const r = auditarVenda([
+      cliente('2 pacotes de pao de queijo'),
+      bot('Pão de queijo: R$ 25,00 o quilo. Cada quilo vem com 10 pacotes de 100 g.', 0.53, false),
+      cliente('quero 1 kg de acerola com laranja'),
+      bot('Acerola com laranja: R$ 25,00 o quilo.\n1 kg = 10 pacotes de 100 g.', 0.6, false),
+    ]);
+
+    expect(tipos(r)).toContain('repetiu_informacao');
+  });
+
   it('não acusa duas vezes no mesmo turno', () => {
     // Uma repetição por turno. O denominador do aproveitamento é turno, e três
     // janelas repetidas na mesma resposta não são três defeitos.

@@ -540,7 +540,17 @@ export function auditarConversa(
     //    resumo repete por definição. Medido no replay da conversa 33: "qual o
     //    valor de tudo?" levou o pedido inteiro de volta, que é exatamente o
     //    comportamento pedido, e foi acusado de repetição.
-    const ehConfirmacao = clienteEntregouDado || PEDE_TOTAL.test(mensagemDoCliente);
+    //
+    //    Resposta que veio de FERRAMENTA também não conta. É o mesmo raciocínio
+    //    que já vale para `afirmou_com_contexto_fraco`: quando os números saem
+    //    da ferramenta, eles são o ESTADO ATUAL do pedido, não um aviso de
+    //    prateleira que o bot arrasta. Medido na conversa 36: os três achados
+    //    graves eram o "Até agora são..." a cada item novo — o recapitulativo
+    //    que esta frente existe para criar. O caso que importa sobrevive: o
+    //    "10 pacotes de 100 g" da conversa 33 saiu dos documentos, com
+    //    `used_tool = 0`.
+    const ehConfirmacao =
+      clienteEntregouDado || PEDE_TOTAL.test(mensagemDoCliente) || mensagem.usouFerramenta;
 
     for (const frase of frases(mensagem.conteudo)) {
       // Pedido repetido já tem detector próprio; aqui o alvo é INFORMAÇÃO.

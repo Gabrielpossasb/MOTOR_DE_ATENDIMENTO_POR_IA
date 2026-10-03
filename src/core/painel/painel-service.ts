@@ -16,6 +16,7 @@ import {
 } from '../../storage/repositories/handoffs.js';
 import { listarLembretes, type Lembrete } from '../agenda/lembretes.js';
 import { listarAlertasPendentes, type Alerta } from '../alertas/alertas.js';
+import { pedidosConfirmados, type Pedido } from '../pedido/pedido-service.js';
 
 export interface ResumoDeConversa {
   id: number;
@@ -31,7 +32,7 @@ export interface ResumoDeConversa {
 export interface PainelDoTenant {
   tenant: { slug: string; nome: string };
   /** Ajustes em vigor — o painel mostra o limiar ao lado dos scores. */
-  ajustes: { topK: number; limiarDeConfianca: number };
+  ajustes: { topK: number; limiarDeConfianca: number; maximoDeLinhas: number; vende: boolean };
   conversas: {
     total: number;
     abertas: number;
@@ -76,6 +77,14 @@ export interface PainelDoTenant {
    * rodou hoje — senão o lembrete não sair passaria em silêncio.
    */
   lembretesPendentes: Lembrete[];
+  /**
+   * Pedidos fechados, do mais novo para o mais velho.
+   *
+   * E o que a dona do negocio separa e entrega. Um pedido que existe so no
+   * banco e meia funcionalidade: ninguem vai abrir o SQLite antes de sair de
+   * casa. Vazio em cliente que nao vende.
+   */
+  pedidosConfirmados: Pedido[];
   perguntasSemResposta: PerguntaSemResposta[];
   listaDeConversas: ResumoDeConversa[];
 }
@@ -124,6 +133,7 @@ export function montarPainel(db: Db, slug: string, limiteDeConversas = 50): Pain
     handoffsPendentes: listarHandoffsPendentes(db, tenant.id),
     alertasPendentes: listarAlertasPendentes(db, tenant.id),
     lembretesPendentes: listarLembretes(db, tenant.id, { limite: 50 }),
+    pedidosConfirmados: tenant.config.vende === true ? pedidosConfirmados(db, tenant.id) : [],
     mensagens: {
       total: mensagens.total,
       doBot,

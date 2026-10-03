@@ -1,0 +1,231 @@
+{
+  "_leia": "Fonte de verdade dos PRECOS para a ferramenta de pedido. Nao e ingerido (so .md e .txt entram no RAG), entao nao polui a busca. Os precos existem aqui e nos documentos .md: o teste 'produtos.json nao divergiu dos documentos' falha quando os dois discordam.",
+  "taxaDeEntrega": {
+    "pesoMinimoGratisKg": 2,
+    "taxaCentavos": 500
+  },
+  "produtos": [
+    {
+      "chave": "polpa-abacaxi",
+      "nome": "polpa de abacaxi",
+      "precoCentavos": 2500,
+      "unidade": "kg",
+      "pesoKg": 1,
+      "termos": [
+        "abacaxi",
+        "polpa de abacaxi"
+      ]
+    },
+    {
+      "chave": "polpa-abacaxi-hortela",
+      "nome": "polpa de abacaxi com hortelã",
+      "precoCentavos": 2900,
+      "unidade": "kg",
+      "pesoKg": 1,
+      "termos": [
+        "abacaxi com hortela",
+        "polpa de abacaxi com hortela",
+        "abacaxi hortela"
+      ]
+    },
+    {
+      "chave": "polpa-acerola",
+      "nome": "polpa de acerola",
+      "precoCentavos": 2500,
+      "unidade": "kg",
+      "pesoKg": 1,
+      "termos": [
+        "acerola",
+        "polpa de acerola"
+      ]
+    },
+    {
+      "chave": "polpa-acerola-laranja",
+      "nome": "polpa de acerola com laranja",
+      "precoCentavos": 2500,
+      "unidade": "kg",
+      "pesoKg": 1,
+      "termos": [
+        "acerola com laranja",
+        "polpa de acerola com laranja",
+        "acerola laranja"
+      ]
+    },
+    {
+      "chave": "polpa-acai",
+      "nome": "polpa de açaí",
+      "precoCentavos": 3500,
+      "unidade": "kg",
+      "pesoKg": 1,
+      "termos": [
+        "polpa de acai",
+        "acai em polpa"
+      ]
+    },
+    {
+      "chave": "polpa-caju",
+      "nome": "polpa de caju",
+      "precoCentavos": 2500,
+      "unidade": "kg",
+      "pesoKg": 1,
+      "termos": [
+        "caju",
+        "polpa de caju"
+      ]
+    },
+    {
+      "chave": "polpa-cupuacu",
+      "nome": "polpa de cupuaçu",
+      "precoCentavos": 2500,
+      "unidade": "kg",
+      "pesoKg": 1,
+      "termos": [
+        "cupuacu",
+        "polpa de cupuacu"
+      ]
+    },
+    {
+      "chave": "polpa-frutas-vermelhas",
+      "nome": "polpa de frutas vermelhas",
+      "precoCentavos": 2900,
+      "unidade": "kg",
+      "pesoKg": 1,
+      "termos": [
+        "frutas vermelhas",
+        "polpa de frutas vermelhas"
+      ]
+    },
+    {
+      "chave": "polpa-goiaba",
+      "nome": "polpa de goiaba",
+      "precoCentavos": 2500,
+      "unidade": "kg",
+      "pesoKg": 1,
+      "termos": [
+        "goiaba",
+        "polpa de goiaba"
+      ]
+    },
+    {
+      "chave": "polpa-graviola",
+      "nome": "polpa de graviola",
+      "precoCentavos": 3500,
+      "unidade": "kg",
+      "pesoKg": 1,
+      "termos": [
+        "graviola",
+        "polpa de graviola"
+      ]
+    },
+    {
+      "chave": "polpa-limao",
+      "nome": "polpa de limão",
+      "precoCentavos": 2500,
+      "unidade": "kg",
+      "pesoKg": 1,
+      "termos": [
+        "limao",
+        "polpa de limao"
+      ]
+    },
+    {
+      "chave": "polpa-maracuja",
+      "nome": "polpa de maracujá",
+      "precoCentavos": 3500,
+      "unidade": "kg",
+      "pesoKg": 1,
+      "termos": [
+        "maracuja",
+        "polpa de maracuja"
+      ]
+    },
+    {
+      "chave": "polpa-morango",
+      "nome": "polpa de morango",
+      "precoCentavos": 3500,
+      "unidade": "kg",
+      "pesoKg": 1,
+      "termos": [
+        "morango",
+        "polpa de morango"
+      ]
+    },
+    {
+      "chave": "polpa-uva",
+      "nome": "polpa de uva",
+      "precoCentavos": 2900,
+      "unidade": "kg",
+      "pesoKg": 1,
+      "termos": [
+        "uva",
+        "polpa de uva"
+      ]
+    },
+    {
+      "chave": "fruta-morango",
+      "nome": "morango congelado em pedaços",
+      "precoCentavos": 3500,
+      "unidade": "kg",
+      "pesoKg": 1,
+      "termos": [
+        "morango congelado",
+        "fruta morango",
+        "morango em pedacos"
+      ]
+    },
+    {
+      "chave": "fruta-abacaxi",
+      "nome": "abacaxi congelado em pedaços",
+      "precoCentavos": 2500,
+      "unidade": "kg",
+      "pesoKg": 1,
+      "termos": [
+        "abacaxi congelado",
+        "abacaxi em pedacos"
+      ]
+    },
+    {
+      "chave": "fruta-maracuja",
+      "nome": "maracujá congelado em pedaços",
+      "precoCentavos": 3500,
+      "unidade": "kg",
+      "pesoKg": 1,
+      "termos": [
+        "maracuja congelado",
+        "maracuja em pedacos"
+      ]
+    },
+    {
+      "chave": "pao-de-queijo",
+      "nome": "pão de queijo congelado",
+      "precoCentavos": 2500,
+      "unidade": "pacote de 1 kg",
+      "pesoKg": 1,
+      "termos": [
+        "pao de queijo",
+        "pao de queijo congelado"
+      ]
+    },
+    {
+      "chave": "acai-balde",
+      "nome": "açaí pronto, balde de 2 litros",
+      "precoCentavos": 4300,
+      "unidade": "balde de 2 litros",
+      "pesoKg": null,
+      "_pesoKg": "NULL de proposito, e nao zero: a taxa de entrega e por PESO e este produto e vendido por VOLUME. Ninguem disse se 2 litros contam para os 2 kg de entrega gratis, e chutar seria inventar. Com peso indefinido a ferramenta devolve `taxaIndefinida` e o bot confirma com a responsavel. Assim que a dona responder, troque por um numero e a pergunta desaparece.",
+      "termos": [
+        "acai pronto",
+        "balde de acai",
+        "acai de 2 litros",
+        "balde"
+      ]
+    }
+  ],
+  "ambiguos": {
+    "_leia": "Termo que nomeia dois produtos com PRECOS diferentes. A ferramenta devolve as opcoes e o bot pergunta, em vez de escolher o vizinho: e a regra 4 do prompt ('item PARECIDO nao e resposta') virando contrato.",
+    "acai": [
+      "polpa-acai",
+      "acai-balde"
+    ]
+  }
+}

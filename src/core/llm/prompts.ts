@@ -121,16 +121,57 @@ export function regrasDeAviso(): string {
   ].join('\n');
 }
 
+/**
+ * Instruções do pedido, acrescentadas quando o bot tem as ferramentas de venda.
+ *
+ * A regra P1 é a razão de existir desta seção. Medido na conversa 34: com o
+ * prompt consertado o bot passou a montar o pedido de cabeça e passou a errar —
+ * listou três itens e informou o total de dois (R$ 60,00 onde a soma era
+ * R$ 110,00). Ele sabe multiplicar; não sabe manter uma lista. Então a lista
+ * sai da cabeça dele e vai para a ferramenta.
+ */
+export function regrasDoPedido(): string {
+  return [
+    'PEDIDO:',
+    'Você monta o pedido com as ferramentas. O pedido fica guardado e NÃO depende da sua ' +
+      'memória nem do que ainda está visível no histórico.',
+    '',
+    'P1. NUNCA some de cabeça e nunca repita um total de memória. Todo valor que você disser ' +
+      'ao cliente vem do que a ferramenta devolveu AGORA.',
+    'P2. Assim que o cliente escolher um produto E a quantidade, chame `adicionar_ao_pedido`. ' +
+      'Se ele disse o produto sem a quantidade, PERGUNTE quantos quilos — não suponha 1.',
+    'P3. Se a ferramenta recusar o produto, não ofereça um parecido no lugar. Diga que não ' +
+      'temos aquele e, se ela mandar as opções, pergunte qual delas o cliente quer.',
+    'P4. Qualquer dado de entrega que o cliente mencionar — nome, endereço, horário, forma de ' +
+      'pagamento — vai para `anotar_dados_da_entrega` na hora, mesmo que você não tenha ' +
+      'perguntado. Depois use `ainda_falta` para saber o que pedir, e peça só isso.',
+    'P5. Para fechar, chame `fechar_pedido` com confirmado=false, leia o pedido inteiro de ' +
+      'volta ao cliente e só chame com confirmado=true depois do sim dele.',
+    // P6 nasceu de um laço medido na conversa 35. O cliente disse "pode ser
+    // amanhã de manhã", o bot NÃO anotou, e depois respondeu "pra fechar só
+    // falta me dizer o horário" — duas vezes. O prompt do tenant diz "NUNCA
+    // confirme o horário da entrega", e o modelo leu isso como "não registre o
+    // horário". São coisas diferentes, e agora está escrito que são.
+    'P6. ANOTAR o horário que o cliente pediu é OBRIGATÓRIO: mande em ' +
+      '`anotar_dados_da_entrega`, campo horario_desejado, assim que ele disser. Sem isso o ' +
+      'pedido não fecha e a conversa entra em laço.',
+    'P7. CONFIRMAR o horário é proibido, e é outra coisa. A ferramenta guarda o horário que o ' +
+      'cliente PEDIU; quem diz que ele está disponível é a responsável. Anotar não é prometer.',
+  ].join('\n');
+}
+
 export function montarPromptDoSistema(
   promptDoTenant: string,
   ajustes: AjustesDoPrompt,
   resumo?: string,
   agenda?: string,
   aviso?: string,
+  pedido?: string,
 ): string {
   const partes = [promptDoTenant.trim(), regrasDoBot(ajustes)];
 
   if (agenda) partes.push(agenda);
+  if (pedido) partes.push(pedido);
   if (aviso) partes.push(aviso);
 
   if (resumo && resumo.trim().length > 0) {

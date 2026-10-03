@@ -12,6 +12,10 @@ import type { LlmClient } from './llm/client.js';
 import { custoDaResposta } from './llm/client.js';
 import type { Ferramenta, RespostaDoLlm, TurnoDeFerramenta } from './llm/client.js';
 import { FERRAMENTA_DE_AVISO, executarAviso } from './alertas/ferramenta.js';
+import {
+  FERRAMENTAS_DO_PEDIDO,
+  executarFerramentaDoPedido,
+} from './pedido/ferramentas.js';
 import { alertasDaMensagem, registrarAlerta } from './alertas/alertas.js';
 import { AGENDA_PADRAO } from './agenda/disponibilidade.js';
 import {
@@ -26,6 +30,7 @@ import {
   montarPromptSocial,
   regrasDaAgenda,
   regrasDeAviso,
+  regrasDoPedido,
 } from './llm/prompts.js';
 import { normalizar } from './texto.js';
 import { classificarTurnoSocial } from './conversation/turno-social.js';
@@ -319,6 +324,12 @@ export class Motor {
       conversa !== undefined &&
       tenant.config.agenda !== undefined;
 
+    // O pedido é opt-in pela mesma porta que a agenda: `config.vende` mais um
+    // `produtos.json` na pasta do tenant. Uma clínica não monta carrinho, e as
+    // ferramentas falam "produto", "quilo" e "entrega" — oferecê-las a quem não
+    // vende vaza vocabulário errado e paga token para não usar nada.
+    const comPedido = ajustes.vende && conversa !== undefined;
+
     // A ferramenta de avisar o responsável vale para TODO cliente: chamar quem
     // é dono do negócio não é recurso de clínica. Só entra quando há conversa,
     // pela mesma razão das de agenda — a avaliação roda sem conversa, e assim o
@@ -326,7 +337,11 @@ export class Motor {
     const ferramentasOferecidas: Ferramenta[] =
       conversa === undefined
         ? []
-        : [FERRAMENTA_DE_AVISO, ...(comFerramentas ? FERRAMENTAS_DA_AGENDA : [])];
+        : [
+            FERRAMENTA_DE_AVISO,
+            ...(comFerramentas ? FERRAMENTAS_DA_AGENDA : []),
+            ...(comPedido ? FERRAMENTAS_DO_PEDIDO : []),
+          ];
 
     const resposta = await this.conversarComFerramentas({
       promptDoSistema: montarPromptDoSistema(
@@ -335,6 +350,7 @@ export class Motor {
         contexto.resumo,
         comFerramentas ? regrasDaAgenda(hojeParaOPrompt()) : undefined,
         ferramentasOferecidas.length > 0 ? regrasDeAviso() : undefined,
+        comPedido ? regrasDoPedido() : undefined,
       ),
       mensagem: montarMensagemComContexto(textoDaPergunta, relevantes, incerto),
       historico: contexto.historico,
@@ -352,6 +368,21 @@ export class Motor {
               mensagemDoCliente: textoDaPergunta,
               ...(conversa ? { conversaId: conversa.id } : {}),
             },
+            argumentos,
+          );
+        }
+
+        if (FERRAMENTAS_DO_PEDIDO.some((f) => f.nome === nome)) {
+          return executarFerramentaDoPedido(
+            {
+              db: this.db,
+              tenantId: tenant.id,
+              tenantSlug: tenant.slug,
+              contatoId,
+              semPersistir: !persistir,
+              ...(conversa ? { conversaId: conversa.id } : {}),
+            },
+            nome,
             argumentos,
           );
         }
