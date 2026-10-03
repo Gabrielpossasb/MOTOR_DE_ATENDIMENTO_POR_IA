@@ -5,6 +5,7 @@
   "config": {
     "topK": 4,
     "limiarDeConfianca": 0.4,
+    "vende": true,
     "alertas": [
       {
         "tipo": "desconto",

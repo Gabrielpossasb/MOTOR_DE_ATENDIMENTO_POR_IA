@@ -74,6 +74,12 @@ function auditar(mensagens: MensagemGravada[]) {
   return auditarConversa(CONVERSA, mensagens, LIMIAR);
 }
 
+/** Audita como um cliente que VENDE — liga `nao_somou` e `pediu_dado_cedo_demais`. */
+function auditarVenda(mensagens: MensagemGravada[]) {
+  proximoId = 0;
+  return auditarConversa(CONVERSA, mensagens, LIMIAR, { vende: true });
+}
+
 function tipos(relatorio: ReturnType<typeof auditar>): string[] {
   return relatorio.problemas.map((p) => p.tipo);
 }
@@ -351,6 +357,224 @@ describe('sem fonte e handoff', () => {
 
     expect(tipos(r)).toEqual(['handoff']);
     expect(r.aproveitamento).toBe(0);
+  });
+});
+
+/**
+ * Os achados abaixo nasceram da conversa 33 da Polpa Santa Helena (2026-10-01),
+ * que tirou 100% de aproveitamento contendo o pior defeito desta fase: o
+ * cliente pediu o total e o bot mandou ele mandar os itens de novo.
+ */
+describe('não somou o pedido', () => {
+  it('ACUSA pedir o total e não vir valor nenhum', () => {
+    // O turno 9 da conversa 33. O bot tinha o pedido, escalou uma SOMA para a
+    // dona do negócio e pediu os itens de volta.
+    const r = auditarVenda([
+      cliente('quero 2 kg de acai'),
+      bot('2 kg de açaí dá R$ 70,00.'),
+      cliente('qual o valor de tudo?'),
+      bot('Vou confirmar o total certinho com a responsável. Me manda de novo os itens.', 0.519),
+    ]);
+
+    expect(tipos(r)).toContain('nao_somou');
+    expect(r.problemas.find((p) => p.tipo === 'nao_somou')?.grave).toBe(true);
+  });
+
+  it('NÃO acusa quando o total vem junto', () => {
+    const r = auditarVenda([
+      cliente('quero 2 kg de acai'),
+      bot('2 kg de açaí dá R$ 70,00.'),
+      cliente('qual o valor de tudo?'),
+      bot('Fica R$ 70,00 no total, com entrega grátis.'),
+    ]);
+
+    expect(tipos(r)).toEqual([]);
+  });
+
+  it('NÃO acusa em cliente que não vende', () => {
+    // Numa clínica "no total" aparece em outros contextos e não existe pedido
+    // para somar. O achado é opt-in por isso.
+    const r = auditar([
+      cliente('qual o valor de tudo?'),
+      bot('Depende do que você precisa fazer.', 0.5),
+    ]);
+
+    expect(tipos(r)).toEqual([]);
+  });
+});
+
+describe('pediu dado de fechamento cedo demais', () => {
+  it('ACUSA pedir endereço e pagamento antes de o cliente escolher nada', () => {
+    // O turno 2 da conversa 33, a SEGUNDA mensagem do atendimento. O cliente só
+    // tinha dito "gostaria de encomendar algumas polpas para amanhã".
+    const r = auditarVenda([
+      cliente('Gostaria de encomendar algumas polpas para amanhã'),
+      bot(
+        'Claro! Me passa o nome de quem recebe, endereço completo, horário que fica melhor ' +
+          'amanhã e a forma de pagamento.',
+        0.475,
+      ),
+    ]);
+
+    const achados = r.problemas.filter((p) => p.tipo === 'pediu_dado_cedo_demais');
+    expect(achados).toHaveLength(2);
+    expect(achados.map((p) => p.detalhe).join(' ')).toMatch(/endereço/);
+    expect(achados.map((p) => p.detalhe).join(' ')).toMatch(/pagamento/);
+  });
+
+  it('NÃO acusa depois de existir quantidade na conversa', () => {
+    const r = auditarVenda([
+      cliente('quero 2 kg de acai'),
+      bot('2 kg de açaí dá R$ 70,00. Me passa o endereço e a forma de pagamento.'),
+    ]);
+
+    expect(tipos(r)).toEqual([]);
+  });
+
+  it('NÃO acusa pedir o NOME antes do pedido', () => {
+    // Decisão do dono do negócio: perguntar o nome no começo é educação, não
+    // pressa. Quem assusta é endereço e pagamento.
+    const r = auditarVenda([cliente('bom dia, queria encomendar'), bot('Claro! Qual o seu nome?')]);
+
+    expect(tipos(r)).toEqual([]);
+  });
+
+  it('entende "2kg" grudado como quantidade', () => {
+    // O cliente escreve "2kg", o bot escreve "2 kg". Se a quantidade não fosse
+    // reconhecida nas duas formas, todo pedido legítimo viraria "cedo demais".
+    const r = auditarVenda([
+      cliente('quanto sai 2kg de morango?'),
+      bot('2 kg de morango = R$ 70,00. Me passa o endereço da entrega.'),
+    ]);
+
+    expect(tipos(r)).toEqual([]);
+  });
+});
+
+describe('endereço e pagamento', () => {
+  it('ACUSA pedir o endereço que a conversa já tinha', () => {
+    // Conversa 32, turnos 10, 11 e 13: o cliente deu nome e endereço e o bot
+    // pediu os dois de novo, cinco vezes somando os dois campos. A lista de
+    // dados era vocabulário de clínica e nada disso era visível.
+    const r = auditar([
+      cliente('quero comprar'),
+      bot('Me passa o endereço completo e a forma de pagamento.'),
+      cliente('maria souza, rua das flores 120 jardim aero rancho'),
+      bot('Perfeito. Me confirma o endereço completo, por favor?'),
+    ]);
+
+    expect(tipos(r)).toEqual(['pedido_repetido']);
+    expect(r.problemas[0]?.detalhe).toContain('o endereço');
+  });
+
+  it('ACUSA pedir a forma de pagamento que o cliente já escolheu', () => {
+    const r = auditar([
+      cliente('quero comprar'),
+      bot('Qual a forma de pagamento?'),
+      cliente('pago no pix'),
+      bot('Me confirma a forma de pagamento, por favor?'),
+    ]);
+
+    expect(tipos(r)).toEqual(['pedido_repetido']);
+  });
+
+  it('a POLÍTICA de cobertura dita pelo bot não é o endereço do cliente', () => {
+    // "Entregamos em toda Campo Grande, em qualquer bairro" casa com o padrão de
+    // endereço por causa de "bairro". Se contasse como endereço recebido, o
+    // pedido legítimo seguinte viraria defeito.
+    const r = auditar([
+      cliente('vocês entregam em qualquer lugar?'),
+      bot('Entregamos em toda Campo Grande, em qualquer bairro, e também em Terenos.'),
+      cliente('quero comprar'),
+      bot('Me passa o endereço completo da entrega.'),
+    ]);
+
+    expect(tipos(r)).toEqual([]);
+  });
+
+  it('a LISTA de formas de pagamento não é a escolha do cliente', () => {
+    const r = auditar([
+      cliente('como posso pagar?'),
+      bot('Aceitamos Pix, dinheiro e cartão, na entrega.'),
+      cliente('quero comprar'),
+      bot('Qual a forma de pagamento?'),
+    ]);
+
+    expect(tipos(r)).toEqual([]);
+  });
+});
+
+describe('repetiu informação', () => {
+  it('ACUSA repetir o aviso de embalagem sem ninguém ter perguntado', () => {
+    // A reclamação literal: "ele está citando demais que vem 10 pacotes em 1kg".
+    // Turnos 4 e 5 da conversa 33, seguidos. As duas frases não são iguais — o
+    // que elas compartilham é a janela "10 pacotes de 100".
+    const r = auditarVenda([
+      cliente('eu ja quero 2 pacotes de pao de queijo'),
+      bot('Pão de queijo congelado: R$ 25,00 o quilo. Cada quilo vem com 10 pacotes de 100 g.'),
+      cliente('quero 1 kg de polpa de acerola com laranja'),
+      bot('Polpa de acerola com laranja: R$ 25,00 o quilo.\n1 kg = 10 pacotes de 100 g.'),
+    ]);
+
+    const achado = r.problemas.find((p) => p.tipo === 'repetiu_informacao');
+    expect(achado?.grave).toBe(true);
+    expect(achado?.detalhe).toContain('10 pacotes de 100');
+    expect(achado?.turno).toBe(2);
+  });
+
+  it('NÃO acusa confirmar o número que o cliente escolheu', () => {
+    // Conversa 23 da clínica: o bot listou dez horários, o cliente disse "quero
+    // as 8" e ele respondeu "Tem 08:00 na próxima quinta (08/10)". Resposta
+    // certa. "as 8" e "08:00" são o mesmo horário escrito de dois jeitos.
+    const r = auditar([
+      cliente('tem horario na proxima quinta?'),
+      bot('Na próxima quinta (08/10) tenho 08:00, 09:00 e 10:00.', 0.391, true),
+      cliente('quero as 8'),
+      bot('Tem 08:00 na próxima quinta (08/10).', 0.34, true),
+    ]);
+
+    expect(tipos(r)).toEqual([]);
+  });
+
+  it('NÃO acusa o recapitulativo de fechamento', () => {
+    // Conversa 32, turno 14. É a guarda mais importante: o recapitulativo do
+    // pedido é o comportamento que queremos CRIAR, e acusá-lo faria a auditoria
+    // punir o conserto.
+    const r = auditarVenda([
+      cliente('2kg de acai e 1 de cupuacu'),
+      bot('2 kg de açaí + 1 kg de cupuaçu = R$ 95,00. Entrega grátis, porque passou de 2 kg.'),
+      cliente('maria souza, rua das flores 120'),
+      bot('Anotei, Maria Souza. Falta o dia e a forma de pagamento.'),
+      cliente('amanha a tarde, pago no pix'),
+      bot('Entrega amanhã à tarde e pagamento no Pix.\nPedido: 2 kg de açaí + 1 kg de cupuaçu. Total: R$ 95,00.'),
+    ]);
+
+    expect(tipos(r).filter((t) => t === 'repetiu_informacao')).toEqual([]);
+  });
+
+  it('NÃO acusa repetir o preço de um item que o cliente pediu de novo', () => {
+    // O cliente nomeou a acerola outra vez: repetir o preço dela é responder.
+    const r = auditarVenda([
+      cliente('quanto custa a acerola?'),
+      bot('Acerola: R$ 25,00 o quilo.'),
+      cliente('1 kg de acerola e 1 kg de maracuja'),
+      bot('Acerola: R$ 25,00 o quilo. Maracujá: R$ 35,00 o quilo. Total: R$ 60,00.'),
+    ]);
+
+    expect(tipos(r).filter((t) => t === 'repetiu_informacao')).toEqual([]);
+  });
+
+  it('não acusa duas vezes no mesmo turno', () => {
+    // Uma repetição por turno. O denominador do aproveitamento é turno, e três
+    // janelas repetidas na mesma resposta não são três defeitos.
+    const r = auditarVenda([
+      cliente('o que vem em 1 kg?'),
+      bot('Cada quilo vem com 10 pacotes de 100 g, e dá 10 copos de suco.'),
+      cliente('e o pao de queijo?'),
+      bot('Pão de queijo: R$ 25,00.\nCada quilo vem com 10 pacotes de 100 g.\nDá 10 copos de suco.'),
+    ]);
+
+    expect(tipos(r).filter((t) => t === 'repetiu_informacao')).toHaveLength(1);
   });
 });
 

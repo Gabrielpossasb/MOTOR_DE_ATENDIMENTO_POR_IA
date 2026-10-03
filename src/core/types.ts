@@ -13,6 +13,23 @@ export interface ConfigDoTenant {
   limiarDeConfianca?: number;
   agenda?: ConfigDaAgenda;
   /**
+   * Este cliente VENDE: o bot monta pedido e informa o total.
+   *
+   * Nasceu de uma contradição no prompt. A regra 8, global, dizia "não tente
+   * vender nem processar pagamento" — escrita quando vender estava fora de
+   * escopo — enquanto o prompt da Polpa Santa Helena dizia "junte o pedido" e
+   * "some o pedido e informe o total". As duas no mesmo prompt, e a regra 8
+   * dentro do bloco REGRAS OBRIGATÓRIAS.
+   *
+   * Vender virou recurso por decisão de produto, igual a agendar. A proibição
+   * continua valendo para quem não ligou isto, e a parte de NÃO processar
+   * pagamento vale para todos de qualquer jeito.
+   *
+   * Também liga os achados da auditoria que só existem para quem vende
+   * (`nao_somou`, `pediu_dado_cedo_demais`).
+   */
+  vende?: boolean;
+  /**
    * Palavras que acionam o responsável sozinhas, sem depender do modelo.
    *
    * É a rede determinística: o modelo pega o pedido torto ("dá pra fazer mais

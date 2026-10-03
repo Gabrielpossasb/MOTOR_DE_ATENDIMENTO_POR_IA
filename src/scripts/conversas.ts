@@ -58,7 +58,10 @@ function principal(): void {
       return;
     }
 
-    const relatorios = conversas.map((c) => auditarConversa(c, mensagensApos(db, c.id, 0), limiar));
+    const opcoes = { vende: tenant.config.vende === true };
+    const relatorios = conversas.map((c) =>
+      auditarConversa(c, mensagensApos(db, c.id, 0), limiar, opcoes),
+    );
 
     if (id) {
       mostrarTranscrito(db, conversas[0] as ConversaParaAuditar, relatorios[0] as RelatorioDeConversa);

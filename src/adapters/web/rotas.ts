@@ -290,7 +290,9 @@ export async function tratar(
 
     responderJson(res, 200, {
       mensagens,
-      relatorio: auditarConversa(conversa, mensagens, configEfetiva(tenant).limiarDeConfianca),
+      relatorio: auditarConversa(conversa, mensagens, configEfetiva(tenant).limiarDeConfianca, {
+        vende: tenant.config.vende === true,
+      }),
     });
     return;
   }

@@ -18,6 +18,7 @@
 import { config } from '../../config.js';
 import type { Db } from '../../storage/db.js';
 import { mensagensApos, type MensagemGravada } from '../../storage/repositories/messages.js';
+import { normalizar } from '../texto.js';
 import { classificarTurnoSocial } from './turno-social.js';
 
 export type TipoDeProblema =
@@ -30,7 +31,13 @@ export type TipoDeProblema =
   /** Respondeu sem citar fonte nenhuma, e a mensagem não era social. */
   | 'sem_fonte'
   /** Desistiu e chamou a equipe. */
-  | 'handoff';
+  | 'handoff'
+  /** Repetiu um fato numérico que já tinha dito, sem o cliente ter puxado o assunto. */
+  | 'repetiu_informacao'
+  /** Pediu endereço ou pagamento antes de existir pedido na conversa. */
+  | 'pediu_dado_cedo_demais'
+  /** O cliente pediu o total e a resposta não traz valor nenhum. */
+  | 'nao_somou';
 
 export interface ProblemaDaConversa {
   tipo: TipoDeProblema;
@@ -78,6 +85,18 @@ interface DadoDoAtendimento {
   pedido: RegExp;
   /** Ausente quando não há forma honesta de reconhecer o dado no texto. */
   fornecido?: RegExp;
+  /**
+   * A resposta do BOT também passa a conversa a ter este dado.
+   *
+   * Vale para data e horário: o bot ofereceu "sexta (02/10)", então a conversa
+   * sabe a data e pedi-la de novo é esquecimento. NÃO vale para endereço nem
+   * pagamento, e o motivo é um falso positivo concreto: *"Entregamos em toda
+   * Campo Grande, em qualquer bairro"* casa com `fornecido` do endereço, e
+   * *"Aceitamos Pix, dinheiro e cartão"* casa com o do pagamento. Nos dois casos
+   * o bot está informando a POLÍTICA, não recebendo a escolha do cliente — e
+   * tratar como recebido faria o pedido legítimo seguinte virar defeito.
+   */
+  infereDaRespostaDoBot?: boolean;
 }
 
 const DADOS: DadoDoAtendimento[] = [
@@ -97,6 +116,7 @@ const DADOS: DadoDoAtendimento[] = [
     pedido: /telefone|celular|whatsapp|n[úu]mero para contato/i,
     // Oito dígitos ou mais. Menos que isso é hora ("as 9"), preço ou dia do mês.
     fornecido: /(\d[\s().-]*){8,}/,
+    infereDaRespostaDoBot: true,
   },
   {
     id: 'convenio',
@@ -104,6 +124,7 @@ const DADOS: DadoDoAtendimento[] = [
     pedido: /conv[êe]nio|carteirinha|plano odontol[óo]gico/i,
     fornecido:
       /n[ãa]o tenho conv|sem conv|particular|tenho conv|meu conv|amil|unimed|bradesco|sulam|odontoprev|metlife|porto seguro/i,
+    infereDaRespostaDoBot: true,
   },
   {
     id: 'data',
@@ -111,14 +132,45 @@ const DADOS: DadoDoAtendimento[] = [
     pedido: /data exata|qual (o )?dia|que dia|confirma a data|para qual data|qual data/i,
     fornecido:
       /segunda|ter[çc]a|quarta|quinta|sexta|s[áa]bado|sabado|domingo|amanh[ãa]|hoje|depois de amanh|\d{1,2}\/\d{1,2}|dia \d{1,2}/i,
+    infereDaRespostaDoBot: true,
   },
   {
     id: 'horario',
     rotulo: 'o horário',
     pedido: /qual (o )?hor[áa]rio|que hor[áa]rio|hor[áa]rio (que |voc[êe] )?prefer|qual hora/i,
     fornecido: /\d{1,2}\s*[:h]\s*\d{0,2}|[àa]s \d{1,2}|de manh[ãa]|[àa] tarde|meio[- ]dia/i,
+    infereDaRespostaDoBot: true,
+  },
+  // Os dois abaixo nasceram da conversa 33 da Polpa Santa Helena, que tirou
+  // 100% de aproveitamento enquanto pedia endereço e pagamento repetidas vezes.
+  // A lista acima é vocabulário de clínica, e sem estes dois os dois campos que
+  // uma entrega mais repete não tinham como ser vistos.
+  {
+    id: 'endereco',
+    rotulo: 'o endereço',
+    pedido: /endere[çc]o|\bcep\b|onde (voc[êe]|vc|a pessoa|ela|ele) (mora|fica|recebe)/i,
+    // Endereço não tem formato. O que dá para reconhecer é o logradouro ou o
+    // tipo de bairro — é o que todo endereço brasileiro escrito tem.
+    fornecido:
+      /\b(rua|av|avenida|travessa|alameda|pra[çc]a|rodovia|estrada|bairro|jardim|vila|conjunto|condom[íi]nio|quadra|apto|apartamento|bloco)\b/i,
+  },
+  {
+    id: 'pagamento',
+    rotulo: 'a forma de pagamento',
+    pedido:
+      /forma de pagamento|como (voc[êe] |vc |prefere )?(vai )?pagar|prefere pagar|pagamento (fica|ser[áa]|vai ser)/i,
+    fornecido: /\b(pix|dinheiro|cart[ãa]o|cr[ée]dito|d[ée]bito|esp[ée]cie|especie)\b/i,
   },
 ];
+
+/**
+ * Dados que só se pedem com pedido já montado.
+ *
+ * O nome fica FORA de propósito: perguntar o nome no começo é educação, não
+ * pressa. Quem assusta o cliente é endereço e forma de pagamento antes de ele
+ * ter escolhido o que quer.
+ */
+const FECHAMENTO = new Set(['endereco', 'pagamento']);
 
 /**
  * Aberturas que derrubam o reconhecimento de nome.
@@ -156,6 +208,105 @@ const RECUSA =
 
 /** Resposta que afirma um dado: preço, quantidade, hora, parcela. */
 const AFIRMA_DADO = /r\$\s*\d|\d{1,2}\s*:\s*\d{2}|\d+\s*x\b|\d{2,}/i;
+
+/**
+ * O cliente está pedindo o total do pedido.
+ *
+ * O caso é a conversa 33, turno 9: `"qual o valor de tudo?"` levou *"Vou
+ * confirmar o total certinho com a responsável"* — e um aviso para a dona do
+ * negócio. O bot escalou uma SOMA. A conversa tirou 100% porque nenhuma regra
+ * olhava para isso.
+ */
+const PEDE_TOTAL =
+  /valor de tudo|quanto (fica|deu|da|d[áa]|sai|vai dar|ficou) (tudo|no total)|quanto (é|e) tudo|no total|valor total|total do pedido|fecha quanto|deu quanto/i;
+
+/** A resposta traz algum valor em reais. */
+const TEM_VALOR = /r\$\s*\d/i;
+
+/**
+ * Uma quantidade de produto apareceu na conversa.
+ *
+ * É o que separa "ainda estamos descobrindo o que a pessoa quer" de "já existe
+ * pedido". Sem isso não há como dizer que endereço e pagamento foram pedidos
+ * cedo demais.
+ */
+const TEM_QUANTIDADE =
+  /\d+\s*(kg|quilos?|g\b|gramas?|pacotes?|unidades?|litros?|baldes?|caixas?|potes?|copos?)|\b(um|uma|dois|duas|tr[êe]s|quatro|cinco|meio)\s+(kg|quilos?|pacotes?|baldes?|caixas?|potes?)\b/i;
+
+/**
+ * Palavras que não identificam assunto nenhum.
+ *
+ * Servem só ao `repetiu_informacao`: a comparação precisa saber se o cliente
+ * puxou o assunto de volta, e para isso "de", "com" e "kg" não valem como
+ * assunto. Unidades entram aqui de propósito — "kg" aparece em toda frase deste
+ * negócio e casaria sempre.
+ */
+const SEM_ASSUNTO = new Set([
+  'de', 'da', 'do', 'dos', 'das', 'em', 'com', 'para', 'pra', 'por', 'que', 'uma', 'uns',
+  'umas', 'nos', 'nas', 'ao', 'aos', 'kg', 'gr', 'ml', 'reais', 'sim', 'nao', 'mais', 'ja',
+  'vem', 'tem', 'fica', 'sai', 'custa', 'cada', 'seu', 'sua', 'voce', 'esta', 'sao', 'ser',
+  'tudo', 'perfeito', 'certo', 'claro', 'total', 'pedido', 'entrega', 'quilo', 'quilos',
+]);
+
+/**
+ * Tokens normalizados: sem acento, sem pontuação, números preservados.
+ *
+ * Número e letra encostados são separados, e isso não é detalhe: o cliente
+ * escreve `"2kg de acai"` e o bot escreve `"2 kg de açaí"`. Sem separar, as
+ * duas formas não casam e a auditoria achava que o bot estava repetindo um
+ * dado por conta própria quando ele estava ecoando o cliente.
+ */
+function tokens(texto: string): string[] {
+  return normalizar(texto)
+    .replace(/(\d)(\p{L})/gu, '$1 $2')
+    .replace(/(\p{L})(\d)/gu, '$1 $2')
+    .replace(/[^\p{L}\p{N}]+/gu, ' ')
+    .split(' ')
+    .filter((t) => t.length > 0);
+}
+
+/** As palavras da frase que identificam de que ela fala. */
+function assuntos(texto: string): string[] {
+  return tokens(texto).filter((t) => t.length >= 3 && !/\d/.test(t) && !SEM_ASSUNTO.has(t));
+}
+
+/**
+ * Os números do texto, sem zero à esquerda.
+ *
+ * `"as 8"` e `"08:00"` são o mesmo horário escrito de dois jeitos, e cliente e
+ * bot escrevem cada um do seu. Sem igualar os dois, confirmar uma escolha
+ * parece repetição.
+ */
+function numeros(texto: string): Set<string> {
+  const achados = new Set<string>();
+
+  for (const t of tokens(texto)) {
+    if (/^\d+$/.test(t)) achados.add(String(Number(t)));
+  }
+
+  return achados;
+}
+
+/**
+ * Janelas de 4 tokens que contêm algum número.
+ *
+ * Quatro, e só as com número, porque o alvo é **fato repetido**, não frase
+ * parecida. O caso medido: *"Cada quilo vem com 10 pacotes de 100 g"* no turno
+ * 4 e *"1 kg = 10 pacotes de 100 g"* no turno 5 não têm nenhuma frase em comum,
+ * mas compartilham a janela `10 pacotes de 100`. Exigir o número é o que
+ * impede a saudação e o "perfeito, anotei" de casarem entre si.
+ */
+function janelasComNumero(texto: string): string[] {
+  const t = tokens(texto);
+  const janelas: string[] = [];
+
+  for (let i = 0; i + 4 <= t.length; i++) {
+    const janela = t.slice(i, i + 4);
+    if (janela.some((p) => /\d/.test(p))) janelas.push(janela.join(' '));
+  }
+
+  return janelas;
+}
 
 /**
  * Divide a resposta em frases para julgar cada uma por si.
@@ -230,6 +381,17 @@ export interface ConversaParaAuditar {
 }
 
 /**
+ * O que muda de cliente para cliente na auditoria.
+ *
+ * `vende` liga os achados que só fazem sentido em quem monta pedido. Numa
+ * clínica não existe quantidade de produto, então `pediu_dado_cedo_demais`
+ * acusaria toda pergunta de pagamento e `nao_somou` nunca teria o que medir.
+ */
+export interface OpcoesDeAuditoria {
+  vende?: boolean;
+}
+
+/**
  * Audita uma conversa inteira.
  *
  * @param limiar o limiar de confiança do tenant, para saber o que é contexto
@@ -239,6 +401,7 @@ export function auditarConversa(
   conversa: ConversaParaAuditar,
   mensagens: MensagemGravada[],
   limiar: number,
+  opcoes: OpcoesDeAuditoria = {},
 ): RelatorioDeConversa {
   const problemas: ProblemaDaConversa[] = [];
   const respostas = mensagens.filter((m) => m.papel === 'assistant');
@@ -247,16 +410,30 @@ export function auditarConversa(
   const jaFornecido = new Set<string>();
   /** Dados que o bot já pediu antes. */
   const jaPedido = new Set<string>();
+  /** Janelas numéricas que o bot já disse, para pegar fato repetido. */
+  const jaDito = new Set<string>();
+  /** Tudo que o CLIENTE escreveu, palavra por palavra. Ver `repetiu_informacao`. */
+  const ditoPeloCliente = new Set<string>();
+  /** O cliente já pediu alguma quantidade de produto? */
+  let houveQuantidade = false;
+  /** A última mensagem do cliente entregou algum dado do atendimento? */
+  let clienteEntregouDado = false;
 
   let turno = 0;
 
   for (const mensagem of mensagens) {
     if (mensagem.papel === 'user') {
+      clienteEntregouDado = false;
+
       for (const dado of DADOS) {
         if (clienteForneceu(dado, mensagem.conteudo, jaPedido.has(dado.id))) {
           jaFornecido.add(dado.id);
+          clienteEntregouDado = true;
         }
       }
+
+      if (TEM_QUANTIDADE.test(mensagem.conteudo)) houveQuantidade = true;
+      for (const t of tokens(mensagem.conteudo)) ditoPeloCliente.add(t);
       continue;
     }
 
@@ -290,6 +467,19 @@ export function auditarConversa(
         });
       }
 
+      // Endereço e pagamento são dados de FECHAMENTO. Pedi-los antes de existir
+      // pedido assusta quem só perguntou um preço — foi o turno 2 da conversa
+      // 33, a segunda mensagem do atendimento: *"Me passa o nome de quem
+      // recebe, endereço completo, horário que fica melhor amanhã e a forma de
+      // pagamento"*, sem nenhum produto escolhido ainda.
+      if (opcoes.vende === true && !houveQuantidade && FECHAMENTO.has(id)) {
+        registrar({
+          tipo: 'pediu_dado_cedo_demais',
+          grave: true,
+          detalhe: `pediu ${dado.rotulo} antes de o cliente ter escolhido nada`,
+        });
+      }
+
       jaPedido.add(id);
     }
 
@@ -297,13 +487,86 @@ export function auditarConversa(
     // a saber. Foi assim no caso medido — ele ofereceu "sexta (02/10)" e depois
     // pediu "a data exata" três vezes.
     for (const dado of DADOS) {
-      if (dado.fornecido && dado.id !== 'nome' && dado.fornecido.test(mensagem.conteudo)) {
+      if (dado.infereDaRespostaDoBot && dado.fornecido?.test(mensagem.conteudo)) {
         jaFornecido.add(dado.id);
       }
     }
 
+    const mensagemDoCliente = anterior(mensagens, mensagem);
+
+    // O cliente pediu o total e não veio valor nenhum. É o turno 9 da conversa
+    // 33, e é o defeito mais caro desta conversa: o bot tinha o pedido e mandou
+    // o cliente mandar os itens de novo.
+    if (
+      opcoes.vende === true &&
+      PEDE_TOTAL.test(mensagemDoCliente) &&
+      !TEM_VALOR.test(mensagem.conteudo)
+    ) {
+      registrar({
+        tipo: 'nao_somou',
+        grave: true,
+        detalhe: 'o cliente pediu o total e a resposta não trouxe valor nenhum',
+      });
+    }
+
+    // Fato numérico repetido sem o cliente ter puxado o assunto.
+    //
+    // Duas guardas, e as duas saíram de falso positivo real. O alvo é o aviso
+    // de prateleira que o bot arrasta de mensagem em mensagem — na conversa 33,
+    // "10 pacotes de 100 g" nos turnos 4 e 5 seguidos.
+    const assuntosDoCliente = assuntos(mensagemDoCliente);
+    const numerosDoCliente = numeros(mensagemDoCliente);
+    let acusouRepeticao = false;
+
+    // 0. O cliente acabou de ENTREGAR um dado, então esta resposta é uma
+    //    confirmação — e confirmação recapitula. Medido na conversa 32, turno
+    //    14: *"Perfeito, entrega amanhã à tarde e pagamento no Pix 😊 Pedido: 2
+    //    kg de açaí + 1 kg de cupuaçu. Total: R$ 95,00"* depois de o cliente
+    //    dizer "amanha a tarde, pago no pix". Essa é a guarda mais importante
+    //    das quatro: sem ela a auditoria puniria justamente o recapitulativo de
+    //    pedido que o bot precisa passar a escrever.
+    const ehConfirmacao = clienteEntregouDado;
+
+    for (const frase of frases(mensagem.conteudo)) {
+      // Pedido repetido já tem detector próprio; aqui o alvo é INFORMAÇÃO.
+      if (PEDIDO.test(frase)) continue;
+
+      const janelas = janelasComNumero(frase);
+
+      // 1. O cliente trouxe o assunto de volta: repetir é responder. Sem esta
+      //    guarda, "Acerola: R$ 25,00 o quilo" logo depois de o cliente pedir
+      //    acerola de novo viraria defeito.
+      const respondeAoAssunto = assuntos(frase).some((p) => assuntosDoCliente.includes(p));
+
+      // 2. O cliente escolheu um dos números: o bot está CONFIRMANDO. Medido na
+      //    conversa 23 da clínica: o bot listou dez horários, o cliente disse
+      //    "quero as 8" e ele respondeu "Tem 08:00 na próxima quinta (08/10)" —
+      //    resposta certa, e sem esta guarda era acusada de repetição.
+      //
+      // 3. A janela é só o ECO do que o cliente escreveu: é recapitulação, não
+      //    repetição. É o que faz "2 kg de açaí" devolvido ao cliente não ser
+      //    defeito — ele mesmo pediu isso.
+      const repetidas = janelas.filter(
+        (j) =>
+          jaDito.has(j) &&
+          ![...numeros(j)].some((n) => numerosDoCliente.has(n)) &&
+          !tokens(j).every((t) => ditoPeloCliente.has(t)),
+      );
+
+      if (!acusouRepeticao && !ehConfirmacao && !respondeAoAssunto && repetidas.length > 0) {
+        registrar({
+          tipo: 'repetiu_informacao',
+          grave: true,
+          detalhe: `repetiu "${repetidas[0]}", que já tinha dito, sem o cliente ter perguntado de novo`,
+        });
+        acusouRepeticao = true;
+      }
+
+      for (const janela of janelas) jaDito.add(janela);
+    }
+
     const score = melhorScore(mensagem);
-    const social = classificarTurnoSocial(anterior(mensagens, mensagem)) !== undefined;
+    const social = classificarTurnoSocial(mensagemDoCliente) !== undefined;
 
     // A confirmação do botão de retomada não é resposta a pergunta nenhuma: o
     // cliente TOCOU numa ação. Não citar fonte é o comportamento certo, e sem
@@ -384,6 +647,7 @@ export function auditarConversaDoBanco(
   db: Db,
   conversa: ConversaParaAuditar,
   limiar: number,
+  opcoes: OpcoesDeAuditoria = {},
 ): RelatorioDeConversa {
-  return auditarConversa(conversa, mensagensApos(db, conversa.id, 0), limiar);
+  return auditarConversa(conversa, mensagensApos(db, conversa.id, 0), limiar, opcoes);
 }
