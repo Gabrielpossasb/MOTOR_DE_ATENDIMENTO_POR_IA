@@ -164,6 +164,63 @@ sábado e `janelas` não tiver o `"6"`, o bot informa um horário que ele não
 consegue marcar. Quem não configurar nada cai no `AGENDA_PADRAO` (seg-sex,
 8-12 e 13-18, 60min).
 
+### Cliente que VENDE: `vende` e `produtos.json`
+
+Para o bot montar pedido e informar total, duas coisas:
+
+```json
+"config": { "vende": true, "maximoDeLinhas": 5 }
+```
+
+e um **`produtos.json`** na pasta do tenant, que é a fonte de verdade dos preços
+para a conta:
+
+```json
+{
+  "taxaDeEntrega": { "pesoMinimoGratisKg": 2, "taxaCentavos": 500 },
+  "produtos": [
+    {
+      "chave": "polpa-acerola",
+      "nome": "polpa de acerola",
+      "precoCentavos": 2500,
+      "unidade": "kg",
+      "pesoKg": 1,
+      "termos": ["acerola", "polpa de acerola"]
+    }
+  ],
+  "ambiguos": { "acai": ["polpa-acai", "acai-balde"] }
+}
+```
+
+`.json` **não é ingerido** (o ingest só olha `.md` e `.txt`), então ele não
+polui a busca.
+
+Quatro coisas que valem entender antes de escrever o seu:
+
+- **`precoCentavos`, não reais.** Somar `25.00` em float acumula erro, e um total
+  errado por um centavo destrói mais confiança que um total ausente.
+- **`termos` é casamento EXATO.** Produto que o modelo pede e não está na lista é
+  **recusa**, não aproximação — quem pede manga não pode receber o preço do
+  abacaxi. Escreva as formas que o cliente de fato usa.
+- **`ambiguos`** é para termo que nomeia dois produtos **com preços diferentes**.
+  O bot recebe as opções e **pergunta**, em vez de escolher. Na Polpa só o
+  `acai` entra: polpa a R$ 35,00 o quilo contra balde pronto a R$ 43,00. Morango
+  e maracujá existem como polpa e como fruta congelada, mas custam o mesmo —
+  então não há o que perguntar.
+- **`pesoKg: null`** quando o produto não é vendido por peso. Não é zero: a taxa
+  de entrega é por peso, e com peso desconhecido a ferramenta devolve `taxa a
+  confirmar` em vez de chutar. Assim que você souber o número, troque e a
+  pergunta desaparece.
+
+**O preço passa a existir em dois lugares** — aqui para a conta, no `.md` para a
+resposta em prosa. É dívida real, e o conserto é um teste: `pedido.test.ts` falha
+quando um preço da tabela não aparece em nenhum documento. Rode `npm test` depois
+de mexer em preço.
+
+`maximoDeLinhas` sobe de 3 para 5 porque recapitular um pedido com itens e total
+não cabe em três linhas — e o corte é **silencioso**, então a linha perdida seria
+a do total.
+
 ### O que mais afeta a qualidade
 
 **Nos documentos:** use títulos (`## Assunto` no `.md`; no `.txt`, linha curta
@@ -199,6 +256,8 @@ src/
     tenant/          # carga do tenant e config efetiva
     conversation/    # janela de contexto e turno social (oi, obrigado, tchau)
     agenda/          # grade de horários, operações, ferramentas do bot e lembretes
+    pedido/          # carrinho em tabela, catálogo de preços e ferramentas de venda
+    alertas/         # avisos para o dono, que NÃO calam o bot (≠ handoff)
     avaliacao/       # regras de acerto, execução da suíte, arquivo, logs e estabilidade
     painel/          # números do painel (agregação é decisão, não formatação)
   storage/           # SQLite: conexão, migrations e repositórios
@@ -206,7 +265,8 @@ src/
     cli/             # simulador no terminal (a borda que conhece o terminal)
     web/             # servidor HTTP: conversa, agenda, testes e painel (a borda que conhece HTTP)
   scripts/           # seed, ingestão, calibração, avaliação, relatório e lembretes
-data/tenants/<slug>/ # documentos + tenant.json + avaliacao.json (_ = não ingerido)
+data/tenants/<slug>/ # documentos + tenant.json + avaliacao.json + produtos.json
+                     # (_ no início do nome = não ingerido; .json nunca é ingerido)
 logs/                # histórico das avaliações (versionado de propósito)
 tests/
 ```
@@ -226,9 +286,11 @@ Estão em `src/core/llm/prompts.ts` e valem para todo tenant:
    **Falar com o atendente virtual**, que destrava a conversa sem apagar o
    aviso pendente para a equipe.
 3. Nunca inventa preço, prazo, horário ou disponibilidade.
-4. No máximo 3 linhas, cortadas no código se o modelo passar.
+4. No máximo 3 linhas, cortadas no código se o modelo passar. O teto é
+   ajustável por tenant (`maximoDeLinhas`): quem monta pedido precisa de mais,
+   e o corte é silencioso.
 5. Uma mensagem por resposta.
-6. Se faltam vários dados, pergunta tudo de uma vez.
+6. Se faltam vários dados, pergunta tudo de uma vez — e **só os que faltam**.
 7. **Marca, remarca e cancela consultas** pelas ferramentas de agenda. Nunca
    afirma disponibilidade sem consultar a agenda de verdade, e confirma com o
    cliente antes de cancelar ou remarcar — isso está na assinatura da
@@ -244,7 +306,21 @@ Estão em `src/core/llm/prompts.ts` e valem para todo tenant:
     nesse intervalo num turno só. Ninguém escreve um parágrafo no WhatsApp:
     escreve "quero marcar", "pra sexta", "as 9". O contador reinicia a cada
     mensagem nova, com teto de 12s.
-11. Não tenta vender nem processar pagamento.
+11. **Monta o pedido pelas ferramentas** quando o tenant tem `vende: true`.
+    O carrinho vive em tabela, não na cabeça do modelo: a conta é somada em
+    código, o pedido sobrevive a qualquer janela de contexto, e produto que não
+    está no catálogo é **recusa** em vez de aproximação. Quem não liga `vende`
+    continua proibido de vender.
+12. **Nunca processa pagamento.** Anotar a forma escolhida é diferente — isso
+    ele faz, e quem recebe o dinheiro é a pessoa na entrega.
+13. **Nunca confirma horário de entrega.** Ele ANOTA o horário que o cliente
+    pediu (obrigatório para fechar) e avisa que a responsável confirma. As duas
+    coisas são diferentes, e confundi-las já travou uma conversa em laço: a
+    coluna do banco se chama `preferred_time` justamente para ninguém conseguir
+    gravar promessa por acidente.
+14. **Avisa o dono do negócio sem parar de conversar** (`avisar_responsavel`).
+    Diferente do handoff, que o cala. Pedido de desconto, horário a confirmar e
+    dúvida de cobertura viram tarefa no painel, e a conversa continua.
 
 Não são regras estéticas: no WhatsApp cada mensagem enviada tem custo, então
 verbosidade vira prejuízo.
@@ -372,18 +448,27 @@ Acompanhe em [PROGRESSO.md](PROGRESSO.md) — passo a passo do que foi feito, o 
 falta e por que cada decisão foi tomada. Atualizado ao fim de cada etapa.
 
 
-**As 4 etapas da fase local estão prontas**, e mais três frentes depois delas:
+**As 4 etapas da fase local estão prontas**, e mais cinco frentes depois delas:
 ingestão, busca, CLI, estado de conversa com janela de contexto e memória
 compactada, handoff com botão de volta, contabilidade de custo por mensagem,
 adaptador web com conversa, agenda, painel e bateria de testes, suíte de
-avaliação com logs e medição de estabilidade, e a **agenda completa** — a
-recepção opera pela página, o bot marca, remarca e cancela por tool calling, e o
-lembrete do dia sai pelo `outbox`.
+avaliação com logs e medição de estabilidade, a **agenda completa** (a recepção
+opera pela página, o bot marca, remarca e cancela por tool calling, e o lembrete
+do dia sai pelo `outbox`), o **agrupamento de mensagens seguidas**, os **avisos
+para o dono** — que, diferente do handoff, não calam o bot — e o **pedido de
+venda em tabela**, com carrinho, catálogo de preços e fechamento por contrato.
 
-423 testes unitários offline. Última medição de acurácia: **100% de acurácia e
-100% de estabilidade** em 5 rodadas consecutivas — medido antes das mudanças de
-prompt da agenda, então precisa ser refeito.
+**481 testes unitários offline.** Última medição paga, em 2026-10-02 e já
+**depois** das mudanças de prompt desta frente: **100% de acurácia e 100% de
+estabilidade** em 5 rodadas consecutivas, 28/28 em todas, zero oscilação, por
+US$ 0,0739.
 
-**Próximo passo natural:** trocar os documentos da clínica fictícia pelos de um
-cliente real, escrever as perguntas de avaliação desse cliente e calibrar. Só
-depois disso vale gastar com a infraestrutura do WhatsApp.
+Dois clientes de exemplo convivem, e é de propósito — eles exercitam caminhos
+opostos do motor: a `clinica-sorriso` **agenda** e não vende; a
+`polpa-santa-helena` **vende** e não agenda.
+
+**Próximo passo natural:** fazer a auditoria cruzar o total que o bot escreveu
+com a soma do carrinho. Hoje uma conversa que informou **R$ 60,00** num pedido de
+**R$ 110,00** tirou 100% de aproveitamento — a régua lê texto e não confere
+conta. É a mesma cegueira do "horário impossível", e agora que existe
+`produtos.json` ela dá para fechar.

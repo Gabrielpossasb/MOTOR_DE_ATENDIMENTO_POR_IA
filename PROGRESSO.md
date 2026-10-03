@@ -1236,6 +1236,165 @@ invalidada —, mas também quer dizer que o comportamento de aviso só se testa
 conversando.
 ---
 
+## O bot monta o pedido (2026-10-02)
+
+Uma conversa real da Polpa Santa Helena — a 33 — tirou **100% de aproveitamento**
+contendo o pior defeito desta fase. O dono do negócio reclamou de cinco coisas; a
+auditoria não via nenhuma delas.
+
+> **CLIENTE** qual o valor de tudo?
+> **BOT** Vou confirmar o total certinho com a responsável, tá? / Se quiser, me
+> manda de novo os itens e quantidades do pedido pra eu conferir tudo.
+
+E ainda gerou um aviso (`kind: 'outro'`): **o bot escalou uma soma para a dona do
+negócio.**
+
+### A causa raiz não era preguiça: era a memória funcionando como especificada
+
+`summary_until_message_id` era 191, então a janela íntegra tinha 4 mensagens e o
+resto era este resumo gravado:
+
+```
+- Cliente quer encomendar para amanhã: 2 pacotes de pão de queijo, 1 kg de
+  polpa de acerola e 1 kg de polpa de maracujá.
+- Assunto de valores dos itens já foi respondido.    ← os preços, apagados
+```
+
+A regra 3 do `montarPromptDeResumo` manda exatamente isso: *"NÃO copie preço que
+o BOT informou. Escreva que o assunto foi respondido, sem o número."* Ela está
+**certa** para a clínica — preço no resumo vira fonte de verdade paralela e
+desatualizada. Ela é **destrutiva** para um pedido em montagem, que é a única
+coisa que precisa carregar número ao longo da conversa.
+
+A exceção foi aberta nos **dois** lugares: no prompt do resumo e no cabeçalho que
+o injeta. Só num deles, o pedido chegaria com os números e o modelo os
+descartaria.
+
+### A contradição que ninguém tinha notado
+
+A regra 8 global dizia *"não tente vender nem processar pagamento"* — escrita
+quando vender estava fora de escopo — enquanto o `promptDoSistema` da Polpa
+mandava *"junte o pedido"* e *"some o pedido e informe o total"*. As duas no
+mesmo prompt, e a regra 8 dentro do bloco `REGRAS OBRIGATÓRIAS`.
+
+Vender virou recurso, igual a agendar. Hoje é opt-in por `config.vende`.
+
+### A Camada 1 consertou sete defeitos e revelou o oitavo
+
+Medido refazendo a conversa 33 palavra por palavra (conversa 34):
+
+| | antes | depois |
+|---|---|---|
+| saudação | "Boa noite! Me fala o que você precisa por aqui" | "Boa noite! Tudo bem? Em que posso ajudar?" |
+| 2ª mensagem | pediu nome, endereço, horário e pagamento | "quais sabores e quantos kg?" |
+| pão de queijo | "vem com 10 pacotes de 100 g" (errado) | "2 pacotes = 2 kg, R$ 50,00" |
+| embalagem | dita 2 turnos seguidos | dita uma vez |
+| taxa | recitou a política | "no seu pedido fica sem taxa" |
+| total | escalou para a dona | informou |
+
+E então o defeito de verdade apareceu: **o carrinho substituía em vez de somar.**
+Turno 4 *"até agora 2 kg de pão de queijo"*; turno 5 *"até agora 1 kg de
+acerola"* — o pão de queijo sumiu. No fim listou três itens e informou
+**R$ 60,00**, quando a soma era **R$ 110,00**.
+
+A aritmética dele está certa em cada conta isolada que conferimos. O que ele não
+consegue é manter uma lista. **Isso não se conserta com regra de prompt.**
+
+### Parte 2: carrinho é estado, e estado mora em tabela
+
+Mesma forma da agenda, que já tinha provado o desenho: tabela, ferramentas, e o
+que importa no **contrato** em vez do prompt. `orders` + `order_items`, cinco
+ferramentas, opt-in por `config.vende` mais um `produtos.json` na pasta do tenant.
+
+A venda completa (conversa 36, 13 turnos) fechou de ponta a ponta: R$ 50 → R$ 75
+→ **R$ 110,00**, nome, endereço, horário e Pix anotados, pedido confirmado no
+banco.
+
+Dois momentos valem destacar, porque são a não-invenção virando contrato:
+
+> — **quero 1 kg de manga também**
+> — *Não temos manga, viu. Se quiser, temos polpa de goiaba, maracujá, morango…*
+>
+> — **então 1 kg de açaí**
+> — *Só confirma pra mim: você quer a polpa de açaí, R$ 35,00 o kg, ou o açaí
+> pronto no balde de 2 litros, R$ 43,00?*
+
+Açaí é o único termo do catálogo em que adivinhar **muda o preço**, e o próprio
+documento avisa "não confundir". A ferramenta devolve as opções e o bot pergunta:
+é a regra 4 do prompt ("item PARECIDO não é resposta") deixando de depender de
+obediência.
+
+O que o contrato garante e o prompt não garantia:
+
+- pedido vazio não fecha, **mesmo** com os quatro dados preenchidos
+- `confirmado: false` não grava, só devolve o que aconteceria
+- o horário gravado se chama **`preferred_time`**, nunca `delivery_time` — quem
+  confirma é a responsável, e o nome da coluna é que garante isso
+- preço em **centavos** e **copiado** para o item; a taxa **congela** no
+  fechamento (migration 008), pelo mesmo argumento: o pedido é registro histórico
+- **um rascunho por conversa**, por índice único parcial, como a vaga da agenda
+
+### Um laço que o prompt criou
+
+O cliente disse *"pode ser amanhã de manhã"*, o bot **não anotou**, e respondeu
+*"pra fechar só falta me dizer o horário"* — duas vezes. O `promptDoSistema`
+dizia *"NUNCA confirme o horário da entrega"*, e o modelo leu isso como **"não
+registre o horário"**.
+
+Anotar o horário pedido e confirmar o horário são coisas diferentes. Agora está
+escrito que são, nas duas pontas (P6 e P7 de `regrasDoPedido`).
+
+### A auditoria precisou de conserto duas vezes
+
+Primeiro para **ver** os defeitos: a lista `DADOS` era vocabulário de clínica e
+não tinha `endereco` nem `pagamento`. Com eles, a conversa 32 expôs **cinco**
+pedidos repetidos que eram invisíveis.
+
+Depois para **não punir o conserto**: ela acusava o recapitulativo *"Até agora
+são…"* como `repetiu_informacao`. Resposta que veio de ferramenta deixou de
+contar — mesmo raciocínio que já valia para `afirmou_com_contexto_fraco`. O caso
+real sobrevive, porque o *"10 pacotes de 100 g"* saiu dos documentos, com
+`used_tool = 0`.
+
+`repetiu_informacao` levou **quatro guardas**, todas nascidas de falso positivo
+medido contra o banco real. A mais importante é a do recapitulativo: sem ela a
+régua marcaria como defeito justamente o comportamento que esta frente existe
+para criar.
+
+### A régua ainda é cega para uma coisa
+
+A conversa 34, com o total **errado**, tirou 100%. É a mesma cegueira já
+registrada para "horário impossível": a auditoria lê texto e não cruza com dado.
+Agora que existe `produtos.json`, dá para comparar o total que o bot escreveu
+contra a soma do carrinho — e aí o preço errado deixa de passar.
+
+### O custo
+
+| | por mensagem |
+|---|---|
+| antes dos avisos | ~US$ 0,0010 |
+| com avisos | ~US$ 0,0022 |
+| com pedido | **~US$ 0,0057** |
+
+Seis definições de ferramenta no prompt de toda mensagem. Em mil mensagens, de
+US$ 1,00 para US$ 5,70. Para quem estava dizendo preço errado e perdendo venda
+por não saber de pedido de desconto, parece pagar — mas é conta do dono.
+
+### A clínica não regrediu, e isso foi medido
+
+As mudanças de prompt desta frente são **globais** em três pontos: a regra 7, as
+regras do resumo e o prompt social. A regressão paga foi refeita depois delas:
+**100% de acurácia e 100% de estabilidade**, 28/28 nas 5 rodadas, zero
+oscilação, por US$ 0,0739.
+
+A saudação era o risco óbvio, e não era risco: as quatro perguntas sociais do
+`avaliacao.json` da clínica usam só `naoPodeConter` — proíbem handoff e preço, e
+não cobram redação. `social-com-pergunta-junto` ("boa tarde, vocês abrem no
+sábado?") continua garantindo que saudação grudada em pergunta responde a
+pergunta.
+
+---
+
 ## Fora de escopo nesta fase
 
 Confirmado com o usuário, não fazer:
@@ -1243,8 +1402,9 @@ Confirmado com o usuário, não fazer:
 - Supabase ou qualquer serviço em nuvem
 - Autenticação, painel administrativo completo, área de login
 - LangChain — o RAG é explícito de propósito
-- O bot tentar vender ou processar pagamento (agendar SAIU daqui: virou recurso,
-  ver a seção "O bot opera a agenda")
+- O bot **processar pagamento** (anotar a forma escolhida é diferente: isso ele
+  faz). **Agendar e vender SAÍRAM daqui**: os dois viraram recurso, cada um com a
+  sua seção — "O bot opera a agenda" e "O bot monta o pedido".
 
 ---
 
