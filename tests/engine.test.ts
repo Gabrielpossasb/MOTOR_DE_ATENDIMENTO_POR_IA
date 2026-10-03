@@ -261,6 +261,68 @@ describe('turno social', () => {
     expect(resposta.texto).toBe('Boa tarde! Como posso ajudar você hoje?');
   });
 
+  it('"ok" depois de o bot PERGUNTAR não é turno social', async () => {
+    // Beco sem saída medido na conversa 33: o bot pediu quatro informações, o
+    // cliente respondeu "ok" e levou "Perfeito, fico no aguardo 😊". O "ok"
+    // está na lista de confirmações sociais, e o prompt social não recebe
+    // documento nenhum — então aquele turno não tinha como levar a conversa a
+    // lugar nenhum.
+    semear([DOCUMENTO]);
+    // A resposta do dublê TEM de ter "?": é a pergunta aberta que muda o
+    // caminho do "ok".
+    const llm = new LlmFake('Abrimos das 8h às 18h. Quer que eu veja um horário?');
+    const motor = new Motor({ db, embedder: new EmbedderFake(), llm });
+
+    await motor.responder(SLUG, 'contato-1', 'clínica abre segunda sexta horas');
+    const resposta = await motor.responder(SLUG, 'contato-1', 'ok');
+
+    expect(resposta.turnoSocial).toBeUndefined();
+    // Passou pelo caminho normal: logo recebeu CONTEXTO, que o social não tem.
+    expect(llm.chamadas[llm.chamadas.length - 1]?.promptDoSistema).not.toContain('apenas social');
+  });
+
+  it('pedido do bot SEM interrogação também tira o "ok" do social', async () => {
+    // Medido no replay: "Me fala quais sabores e quantos kg de cada um você
+    // quer 😊" é um pedido aberto e não tem interrogação nenhuma. A primeira
+    // versão desta correção procurava só "?" e o "ok" seguinte escapou.
+    semear([DOCUMENTO]);
+    const llm = new LlmFake('Me fala quais horários você prefere que eu vejo aqui.');
+    const motor = new Motor({ db, embedder: new EmbedderFake(), llm });
+
+    await motor.responder(SLUG, 'contato-1', 'clínica abre segunda sexta horas');
+    const resposta = await motor.responder(SLUG, 'contato-1', 'ok');
+
+    expect(resposta.turnoSocial).toBeUndefined();
+  });
+
+  it('mas "ok" sem pergunta pendente continua social', async () => {
+    // A exceção é só para confirmação com pergunta aberta. Sem isso, todo "ok"
+    // pagaria embedding e chamada com busca para dizer "de nada".
+    semear([DOCUMENTO]);
+    const motor = new Motor({
+      db,
+      embedder: new EmbedderFake(),
+      llm: new LlmFake('Beleza! Qualquer coisa, estou aqui.'),
+    });
+
+    const resposta = await motor.responder(SLUG, 'contato-1', 'ok');
+
+    expect(resposta.turnoSocial).toBe('confirmacao');
+  });
+
+  it('"obrigado" continua social mesmo depois de pergunta', async () => {
+    // Só a confirmação muda de caminho. Um agradecimento depois de uma
+    // pergunta do bot é agradecimento, e não merece busca.
+    semear([DOCUMENTO]);
+    const llm = new LlmFake('Abrimos das 8h às 18h. Quer que eu veja um horário?');
+    const motor = new Motor({ db, embedder: new EmbedderFake(), llm });
+
+    await motor.responder(SLUG, 'contato-1', 'clínica abre segunda sexta horas');
+    const resposta = await motor.responder(SLUG, 'contato-1', 'obrigado!');
+
+    expect(resposta.turnoSocial).toBe('agradecimento');
+  });
+
   it('deixa a conversa aberta, então a pergunta seguinte é respondida', async () => {
     // A consequência mais grave do bug antigo: o handoff marcava a conversa e
     // `bloquearBotAposHandoff` calava o bot. Quem dissesse "boa tarde" antes

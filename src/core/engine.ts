@@ -35,6 +35,7 @@ import type { BuscaVetorial } from './rag/retriever.js';
 import { BuscaPorCossenoEmMemoria } from './rag/retriever.js';
 import { carregarTenant, configEfetiva } from './tenant/tenant-service.js';
 import {
+  botPediuAlgo,
   compactarSeNecessario,
   janelaDeContexto,
   montarContextoDaConversa,
@@ -171,7 +172,20 @@ export class Motor {
       ? classificarTurnoSocial(textoDaPergunta)
       : undefined;
 
-    if (categoriaSocial) {
+    // "ok", "beleza", "certo" depois de o bot PEDIR algo não são turno
+    // social: são o cliente reconhecendo um pedido pendente. O prompt social
+    // não recebe documento nenhum, então responder por ali é prometer silêncio
+    // — foi o turno 3 da conversa 33, "Perfeito, fico no aguardo 😊" logo
+    // depois de o bot ter pedido quatro informações.
+    //
+    // Só a confirmação muda: um "obrigado" ou um "tchau" continuam sociais,
+    // mesmo vindo depois de pergunta.
+    const confirmacaoPendente =
+      categoriaSocial === 'confirmacao' &&
+      conversa !== undefined &&
+      botPediuAlgo(this.db, conversa.id);
+
+    if (categoriaSocial && !confirmacaoPendente) {
       return this.responderSocialmente({
         tenant,
         conversaId: conversa?.id,
@@ -317,6 +331,7 @@ export class Motor {
     const resposta = await this.conversarComFerramentas({
       promptDoSistema: montarPromptDoSistema(
         tenant.promptDoSistema,
+        { vende: ajustes.vende, maximoDeLinhas: ajustes.maximoDeLinhas },
         contexto.resumo,
         comFerramentas ? regrasDaAgenda(hojeParaOPrompt()) : undefined,
         ferramentasOferecidas.length > 0 ? regrasDeAviso() : undefined,
@@ -356,7 +371,7 @@ export class Motor {
       },
     });
 
-    const texto = limitarLinhas(resposta.texto, config.resposta.maximoDeLinhas);
+    const texto = limitarLinhas(resposta.texto, ajustes.maximoDeLinhas);
     // O modelo pode concluir, lendo o contexto, que não tem a informação.
     // Nesse caso a resposta também vira handoff.
     const desistiu = pediuAjudaHumana(texto);
@@ -572,7 +587,7 @@ export class Motor {
       historico,
     );
 
-    const texto = limitarLinhas(resposta.texto, config.resposta.maximoDeLinhas);
+    const texto = limitarLinhas(resposta.texto, configEfetiva(dados.tenant).maximoDeLinhas);
 
     // O prompt social proíbe prometer atendente, mas a checagem fica assim
     // mesmo: já aconteceu duas vezes neste projeto de o modelo prometer chamar

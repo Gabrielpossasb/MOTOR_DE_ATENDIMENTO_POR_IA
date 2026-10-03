@@ -101,6 +101,7 @@ async function principal(): Promise<void> {
         perguntas,
         execucao,
         limiar: ajustes.limiarDeConfianca,
+        maximoDeLinhas: ajustes.maximoDeLinhas,
         detalhar: repeticoes === 1,
       });
 

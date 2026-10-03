@@ -30,6 +30,14 @@ export interface ConfigDoTenant {
    */
   vende?: boolean;
   /**
+   * Teto de linhas da resposta, sobrescrevendo `config.resposta.maximoDeLinhas`.
+   *
+   * Três linhas bastam para responder pergunta e não bastam para recapitular um
+   * pedido com itens e total — e `limitarLinhas` corta a resposta em SILÊNCIO,
+   * então a linha perdida seria a do total.
+   */
+  maximoDeLinhas?: number;
+  /**
    * Palavras que acionam o responsável sozinhas, sem depender do modelo.
    *
    * É a rede determinística: o modelo pega o pedido torto ("dá pra fazer mais

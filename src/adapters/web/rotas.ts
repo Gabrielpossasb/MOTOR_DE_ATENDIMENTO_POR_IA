@@ -309,6 +309,7 @@ export async function tratar(
       tenant: { slug: tenant.slug, nome: tenant.nome },
       modelo: config.llm.modelo,
       limiar: configEfetiva(tenant).limiarDeConfianca,
+      maximoDeLinhas: configEfetiva(tenant).maximoDeLinhas,
       custoEstimadoPorPerguntaUsd: config.avaliacao.custoEstimadoPorPerguntaUsd,
       arquivo: path.relative(config.caminhos.raiz, caminhoDaAvaliacao(ctx.slug)),
       existe: arquivo.existe,
@@ -362,6 +363,7 @@ export async function tratar(
         slug: ctx.slug,
         tenantId: tenant.id,
         limiar: configEfetiva(tenant).limiarDeConfianca,
+      maximoDeLinhas: configEfetiva(tenant).maximoDeLinhas,
         // Prefixo `web-` para qualquer registro que saia daqui ser reconhecível.
         execucao: `web-${novoIdDeExecucao()}`,
       },

@@ -7,6 +7,15 @@ import type { Tenant } from '../types.js';
 export interface ConfigEfetiva {
   topK: number;
   limiarDeConfianca: number;
+  /**
+   * Teto de linhas da resposta.
+   *
+   * Por tenant porque `limitarLinhas` corta em SILÊNCIO: num recapitulativo de
+   * pedido a linha cortada seria o total, que é a pior truncagem possível. Três
+   * linhas servem para responder pergunta; não servem para listar itens.
+   */
+  maximoDeLinhas: number;
+  vende: boolean;
 }
 
 export function carregarTenant(db: Db, slug: string): Tenant {
@@ -22,5 +31,7 @@ export function configEfetiva(tenant: Tenant): ConfigEfetiva {
   return {
     topK: tenant.config.topK ?? config.busca.topK,
     limiarDeConfianca: tenant.config.limiarDeConfianca ?? config.busca.limiarDeConfianca,
+    maximoDeLinhas: tenant.config.maximoDeLinhas ?? config.resposta.maximoDeLinhas,
+    vende: tenant.config.vende === true,
   };
 }

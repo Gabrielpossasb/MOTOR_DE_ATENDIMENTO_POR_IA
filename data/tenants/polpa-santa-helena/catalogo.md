@@ -3,12 +3,16 @@
 Somos revendedores da marca Pura Polpa. Todas as polpas são 100% fruta, sem
 conservantes e sem aditivos, congeladas para manter sabor e frescor.
 
-## Quanto vem em 1 quilo
+## Como a polpa de fruta é embalada
 
-Cada quilo contém 10 pacotes de 100 gramas. O preço é sempre por quilo, e não
-vendemos pacote avulso.
+Cada quilo DE POLPA contém 10 pacotes de 100 gramas. O preço da polpa é sempre
+por quilo, e não vendemos pacote avulso de polpa.
 
-Um pacote de 100 gramas dá um copo de suco, então 1 quilo rende 10 copos.
+Um pacote de 100 gramas de polpa dá um copo de suco, então 1 quilo de polpa
+rende 10 copos.
+
+Esta embalagem é só da polpa de fruta. Pão de queijo, frutas congeladas em
+pedaços e açaí pronto vêm de outra forma — veja o arquivo de outros produtos.
 
 ## Polpas de R$ 25,00 o quilo
 

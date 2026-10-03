@@ -564,6 +564,22 @@ describe('repetiu informação', () => {
     expect(tipos(r).filter((t) => t === 'repetiu_informacao')).toEqual([]);
   });
 
+  it('NÃO acusa quando o cliente pediu o total', () => {
+    // Medido no replay da conversa 33: "qual o valor de tudo?" levou o pedido
+    // inteiro de volta — que é exatamente o comportamento pedido — e foi
+    // acusado de repetição. Resumo repete por definição.
+    const r = auditarVenda([
+      cliente('quero 2 kg de acai'),
+      bot('Até agora são 2 kg de açaí, R$ 70,00.'),
+      cliente('e 1 kg de goiaba'),
+      bot('Até agora são 2 kg de açaí e 1 kg de goiaba, R$ 95,00.'),
+      cliente('qual o valor de tudo?'),
+      bot('Até agora são 2 kg de açaí e 1 kg de goiaba, total R$ 95,00.'),
+    ]);
+
+    expect(tipos(r).filter((t) => t === 'repetiu_informacao')).toEqual([]);
+  });
+
   it('não acusa duas vezes no mesmo turno', () => {
     // Uma repetição por turno. O denominador do aproveitamento é turno, e três
     // janelas repetidas na mesma resposta não são três defeitos.

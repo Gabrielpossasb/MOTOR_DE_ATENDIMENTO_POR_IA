@@ -17,6 +17,7 @@ import {
 import type { LlmClient } from '../llm/client.js';
 import { custoDaResposta } from '../llm/client.js';
 import { montarEntradaDoResumo, montarPromptDeResumo } from '../llm/prompts.js';
+import { BOT_ESTA_PEDINDO } from './auditoria.js';
 import { classificarTurnoSocial } from './turno-social.js';
 import type { TurnoDaConversa } from '../types.js';
 
@@ -64,6 +65,36 @@ export function ultimaPerguntaDoCliente(db: Db, conversaId: number): string | un
   }
 
   return undefined;
+}
+
+/**
+ * A última coisa que o bot disse deixou um pedido aberto?
+ *
+ * Existe para um beco sem saída medido na conversa 33: o bot pediu quatro
+ * informações, o cliente respondeu `"ok"` e a resposta foi *"Perfeito, fico no
+ * aguardo 😊"*. O `"ok"` está na lista de confirmações sociais, então o turno
+ * foi para o prompt social — que não recebe documento nenhum e por regra não
+ * pode falar do negócio. Resultado: ar morto no meio de um atendimento.
+ *
+ * Um `"ok"` depois de um pedido do bot não é cumprimento: é o cliente
+ * reconhecendo algo pendente, e quem tem de responder é o caminho normal, com
+ * histórico e documentos na mão.
+ *
+ * NÃO basta procurar `?`. Medido no replay: *"Me fala quais sabores e quantos
+ * kg de cada um você quer 😊"* é um pedido aberto e não tem interrogação
+ * nenhuma — e o `"ok"` seguinte escapou por isso. O padrão é o mesmo que a
+ * auditoria usa para dizer que o bot está pedindo algo.
+ */
+export function botPediuAlgo(db: Db, conversaId: number): boolean {
+  const recentes = ultimasMensagens(db, conversaId, config.conversa.mensagensNaJanela);
+
+  for (let i = recentes.length - 1; i >= 0; i--) {
+    const mensagem = recentes[i];
+    if (!mensagem || mensagem.papel !== 'assistant') continue;
+    return BOT_ESTA_PEDINDO.test(mensagem.conteudo);
+  }
+
+  return false;
 }
 
 /** O que vai ao modelo: a memória compactada mais as mensagens ainda íntegras. */

@@ -5,6 +5,7 @@
  * avaliação custa dinheiro para rodar, então as regras que a julgam precisam
  * ter os seus próprios testes offline.
  */
+import { config } from '../../config.js';
 import type { RespostaDoBot } from '../types.js';
 import { normalizar } from '../texto.js';
 
@@ -47,6 +48,7 @@ export function verificar(
   esperado: PerguntaDeAvaliacao,
   resposta: RespostaDoBot,
   contextoRecuperado: string,
+  maximoDeLinhas: number = config.resposta.maximoDeLinhas,
 ): ResultadoDaVerificacao {
   const falhas: FalhaDeRegra[] = [];
   const texto = normalizar(resposta.texto);
@@ -89,7 +91,7 @@ export function verificar(
   }
 
   falhas.push(...verificarNumerosInventados(resposta.texto, contextoRecuperado));
-  falhas.push(...verificarFormato(resposta.texto));
+  falhas.push(...verificarFormato(resposta.texto, maximoDeLinhas));
 
   return { passou: falhas.length === 0, falhas };
 }
@@ -149,13 +151,24 @@ function extrairValores(texto: string): string[] {
   return [...encontrados];
 }
 
-/** Regras de forma que valem para toda resposta. */
-export function verificarFormato(texto: string): FalhaDeRegra[] {
+/**
+ * Regras de forma que valem para toda resposta.
+ *
+ * O teto entra por parâmetro porque é ajustável por cliente: três linhas
+ * bastam para responder pergunta e não bastam para recapitular um pedido.
+ */
+export function verificarFormato(
+  texto: string,
+  maximoDeLinhas: number = config.resposta.maximoDeLinhas,
+): FalhaDeRegra[] {
   const falhas: FalhaDeRegra[] = [];
 
   const linhas = texto.split('\n').filter((l) => l.trim().length > 0);
-  if (linhas.length > 3) {
-    falhas.push({ regra: 'maximoDeLinhas', detalhe: `${linhas.length} linhas, máximo 3` });
+  if (linhas.length > maximoDeLinhas) {
+    falhas.push({
+      regra: 'maximoDeLinhas',
+      detalhe: `${linhas.length} linhas, máximo ${maximoDeLinhas}`,
+    });
   }
 
   return falhas;

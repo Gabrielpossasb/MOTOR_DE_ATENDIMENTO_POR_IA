@@ -185,10 +185,21 @@ const NAO_E_NOME =
 /** Frases em que o bot RECONHECE ter recebido algo. Não são pedidos. */
 const RECONHECIMENTO = /\b(recebi|anotei|obrigad[oa]|perfeito|j[áa] (recebi|tenho|anotei))\b/i;
 
-/** O bot está PEDINDO, e não comentando. Sem isto, "já posso agendar com seu
- *  nome e telefone" contaria como pedido de nome e de telefone. */
-const PEDIDO =
-  /\?|me (manda|mande|envia|envie|confirma|confirme|informa|informe|diz|diga|passa|passe)|preciso d|pode (me )?(mandar|enviar|informar|confirmar|dizer|passar)|falta(m)? |qual|quais|informe|confirme/i;
+/**
+ * O bot está PEDINDO algo, e não comentando.
+ *
+ * Sem isto, "já posso agendar com seu nome e telefone" contaria como pedido de
+ * nome e de telefone.
+ *
+ * Exportado porque o motor precisa da MESMA noção para decidir se um "ok" do
+ * cliente é turno social: `"Me fala quais sabores e quantos kg"` é um pedido
+ * aberto mesmo sem ponto de interrogação, e duas cópias deste padrão
+ * divergiriam em silêncio.
+ */
+export const BOT_ESTA_PEDINDO =
+  /\?|me (manda|mande|envia|envie|confirma|confirme|informa|informe|diz|diga|fala|fale|conta|conte|passa|passe)|preciso d|pode (me )?(mandar|enviar|informar|confirmar|dizer|passar)|falta(m)? |qual|quais|quantos|quantas|informe|confirme/i;
+
+const PEDIDO = BOT_ESTA_PEDINDO;
 
 /**
  * A resposta RECUSA o que o cliente pediu.
@@ -525,7 +536,11 @@ export function auditarConversa(
     //    dizer "amanha a tarde, pago no pix". Essa é a guarda mais importante
     //    das quatro: sem ela a auditoria puniria justamente o recapitulativo de
     //    pedido que o bot precisa passar a escrever.
-    const ehConfirmacao = clienteEntregouDado;
+    //    E quando o cliente PEDE o total, a resposta certa é um resumo — e
+    //    resumo repete por definição. Medido no replay da conversa 33: "qual o
+    //    valor de tudo?" levou o pedido inteiro de volta, que é exatamente o
+    //    comportamento pedido, e foi acusado de repetição.
+    const ehConfirmacao = clienteEntregouDado || PEDE_TOTAL.test(mensagemDoCliente);
 
     for (const frase of frases(mensagem.conteudo)) {
       // Pedido repetido já tem detector próprio; aqui o alvo é INFORMAÇÃO.

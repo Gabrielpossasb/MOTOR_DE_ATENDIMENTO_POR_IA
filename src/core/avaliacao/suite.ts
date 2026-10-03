@@ -23,6 +23,8 @@ export interface DependenciasDaSuite {
   tenantId: number;
   /** Limiar em vigor. Vai no registro para o log dizer contra o que foi medido. */
   limiar: number;
+  /** Teto de linhas do tenant. Ausente = o default global. */
+  maximoDeLinhas?: number;
   /** Id da execução, gravado em cada registro. */
   execucao: string;
 }
@@ -42,7 +44,7 @@ export async function rodarPergunta(
   // A checagem de número inventado compara contra o texto REAL dos chunks, não
   // contra o nome do arquivo — senão qualquer preço passaria.
   const contexto = textoDosChunksCitados(deps.db, deps.tenantId, resposta.fontes);
-  const verificacao = verificar(esperado, resposta, contexto);
+  const verificacao = verificar(esperado, resposta, contexto, deps.maximoDeLinhas);
 
   return {
     execucao: deps.execucao,

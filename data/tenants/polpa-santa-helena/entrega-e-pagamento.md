@@ -18,13 +18,12 @@ Entregamos em toda Campo Grande, em qualquer bairro.
 
 Também entregamos em Terenos.
 
-Fora de Campo Grande e de Terenos, não temos entrega definida: nesse caso a
-entrega precisa ser confirmada com a responsável antes de fechar o pedido.
+Fora de Campo Grande e de Terenos, não temos entrega.
 
 ## Taxa de entrega
 
 Pedidos de 2 quilos ou mais: entrega grátis.
-Pedidos de menos de 2 quilos: taxa de entrega de R$ 5,00.
+Pedidos de 1 quilo: taxa de entrega de R$ 5,00.
 
 Ou seja: quem compra 1 quilo paga R$ 5,00 de taxa. A partir de 2 quilos a
 entrega sai de graça.
@@ -48,4 +47,4 @@ Abaixo de 10 quilos valem os preços de tabela.
 
 ## Formas de pagamento
 
-Aceitamos Pix, dinheiro e cartão na entrega.
+Aceitamos Pix, dinheiro e cartão. Todos podem ser pagos na entrega.

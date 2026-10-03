@@ -15,6 +15,12 @@ pacotes de 100 gramas.
 
 Pão de queijo congelado: R$ 25,00 o quilo.
 
+Vem em pacote fechado de 1 quilo. Um pacote é 1 quilo e custa R$ 25,00, então
+2 pacotes são 2 quilos e custam R$ 50,00.
+
+O pão de queijo NÃO vem em pacotes de 100 gramas: essa embalagem é a da polpa
+de fruta.
+
 ## Açaí pronto
 
 Açaí Pura Polpa de 2 litros: R$ 43,00 o balde.

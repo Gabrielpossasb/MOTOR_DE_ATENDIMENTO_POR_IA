@@ -8,8 +8,15 @@
 import { config } from '../../config.js';
 import type { CategoriaSocial, ResultadoDeBusca } from '../types.js';
 
+/** O que muda de cliente para cliente nas regras gerais. */
+export interface AjustesDoPrompt {
+  /** O bot pode montar pedido e informar total. Ver `ConfigDoTenant.vende`. */
+  vende: boolean;
+  maximoDeLinhas: number;
+}
+
 /** Regras fixas, válidas para todo tenant. */
-export function regrasDoBot(): string {
+export function regrasDoBot(ajustes: AjustesDoPrompt): string {
   return [
     'REGRAS OBRIGATÓRIAS:',
     '1. Ao responder sobre o negócio, use APENAS o CONTEXTO fornecido abaixo. Ele é sua ' +
@@ -36,10 +43,20 @@ export function regrasDoBot(): string {
       'pessoa perguntou por um procedimento, produto, plano ou condição que NÃO aparece ' +
       'no CONTEXTO, o preço ou prazo do item vizinho não serve — vale a regra 3, mesmo ' +
       'que o assunto geral esteja no contexto.',
-    `5. No máximo ${config.resposta.maximoDeLinhas} linhas. Seja direto.`,
+    `5. No máximo ${ajustes.maximoDeLinhas} linhas. Seja direto.`,
     '6. Envie uma única mensagem. Nunca escreva várias mensagens seguidas.',
-    '7. Se faltam vários dados para atender a pessoa, pergunte todos de uma vez, numa frase só.',
-    '8. Não tente vender nem processar pagamento.',
+    '7. Se faltam vários dados para atender a pessoa, pergunte todos de uma vez, numa frase só ' +
+      '— e só os que ainda faltam.',
+    // A regra 8 já foi "não tente vender nem processar pagamento" para todo
+    // mundo. Escrita assim quando vender estava fora de escopo, ela passou a
+    // contradizer o prompt da revendedora de polpa, que manda juntar o pedido e
+    // informar o total — as duas no mesmo prompt, e esta dentro do bloco de
+    // REGRAS OBRIGATÓRIAS. Vender virou recurso por decisão de produto, igual a
+    // agendar. Não processar PAGAMENTO continua valendo para os dois casos.
+    ajustes.vende
+      ? '8. Você PODE montar o pedido e informar o total. NÃO processe pagamento: a forma de ' +
+        'pagamento é só anotada, e quem recebe o dinheiro é a pessoa na entrega.'
+      : '8. Não tente vender nem processar pagamento.',
     '9. Escreva em português do Brasil, em tom de conversa de WhatsApp.',
   ].join('\n');
 }
@@ -106,11 +123,12 @@ export function regrasDeAviso(): string {
 
 export function montarPromptDoSistema(
   promptDoTenant: string,
+  ajustes: AjustesDoPrompt,
   resumo?: string,
   agenda?: string,
   aviso?: string,
 ): string {
-  const partes = [promptDoTenant.trim(), regrasDoBot()];
+  const partes = [promptDoTenant.trim(), regrasDoBot(ajustes)];
 
   if (agenda) partes.push(agenda);
   if (aviso) partes.push(aviso);
@@ -122,8 +140,13 @@ export function montarPromptDoSistema(
         resumo.trim(),
         '',
         'Use o resumo para não fazer o cliente repetir o que já contou. Ele NÃO é ' +
-          'fonte de informação sobre o negócio: preço, prazo e horário continuam vindo ' +
-          'apenas do CONTEXTO.',
+          'fonte de informação sobre o negócio: preço, prazo e horário de TABELA continuam ' +
+          'vindo apenas do CONTEXTO.',
+        // Sem esta frase a exceção da regra 4 do resumo não serve para nada: o
+        // pedido chegaria com os números e o modelo os descartaria aqui.
+        'O PEDIDO do cliente é exceção: itens, quantidades, total e dados de entrega que ' +
+          'estiverem no resumo são o pedido dele, já combinado. Use-os direto e NUNCA peça ' +
+          'para ele mandar os itens de novo.',
       ].join('\n'),
     );
   }
@@ -159,9 +182,22 @@ export function montarPromptDeResumo(): string {
     '3. NÃO copie preço, prazo, horário ou disponibilidade que o BOT informou. Escreva ' +
       'que o assunto foi respondido, sem o número. Esses dados vivem nos documentos e ' +
       'precisam ser consultados de novo, não lembrados.',
-    '4. Não invente nada e não conclua nada. Se não ficou claro, deixe de fora.',
-    `5. No máximo ${config.conversa.resumo.maximoDeLinhas} linhas, em tópicos curtos.`,
-    '6. Português do Brasil. Escreva só o resumo, sem introdução.',
+    // A exceção da regra 4 conserta um defeito medido, não é afrouxamento. Na
+    // conversa 33 da Polpa Santa Helena o cliente perguntou "qual o valor de
+    // tudo?" e o bot respondeu "vou confirmar o total com a responsável, me
+    // manda de novo os itens" — e avisou a dona do negócio. Ele não estava
+    // sendo preguiçoso: o resumo gravado dizia "Assunto de valores dos itens já
+    // foi respondido", exatamente como a regra 3 manda, e os preços tinham
+    // sumido com as mensagens antigas. A regra 3 está certa para uma clínica;
+    // um pedido em montagem é a única coisa que PRECISA carregar número ao
+    // longo da conversa.
+    '4. EXCEÇÃO à regra 3 — o PEDIDO EM ANDAMENTO: itens, quantidades, o total já ' +
+      'informado e os dados de fechamento (nome, endereço, horário desejado, forma de ' +
+      'pagamento) ficam no resumo COM os números. Isso é dado do atendimento, não consulta ' +
+      'ao catálogo. Um pedido que perde o preço obriga o cliente a montar tudo de novo.',
+    '5. Não invente nada e não conclua nada. Se não ficou claro, deixe de fora.',
+    `6. No máximo ${config.conversa.resumo.maximoDeLinhas} linhas, em tópicos curtos.`,
+    '7. Português do Brasil. Escreva só o resumo, sem introdução.',
   ].join('\n');
 }
 
@@ -194,7 +230,19 @@ export function montarEntradaDoResumo(
 
 /** O que fazer em cada tipo de turno social. */
 const ORIENTACAO: Record<CategoriaSocial, string> = {
-  saudacao: 'Cumprimente de volta e convide a pessoa a dizer o que precisa.',
+  // A forma é pedida, e não só a intenção, porque "cumprimente de volta" deixou
+  // solto demais: o bot respondeu "Boa noite! Me fala o que você precisa por
+  // aqui", que o dono do negócio achou largado. Primeira mensagem é primeira
+  // impressão, e aqui ela tem padrão.
+  //
+  // Isto só alcança saudação PURA — `classificarTurnoSocial` devolve
+  // `undefined` quando sobra qualquer conteúdo, e "boa tarde, vocês abrem no
+  // sábado?" tem de receber o horário. Esse caso está na suíte paga, em
+  // `social-com-pergunta-junto`.
+  saudacao:
+    'Cumprimente de volta no mesmo período do dia que a pessoa usou, pergunte como ela está ' +
+    'e ofereça ajuda — nesta forma: "Bom dia! Tudo bem? Em que posso ajudar?". As palavras ' +
+    'podem variar; a estrutura das três partes, não.',
   agradecimento: 'Responda ao agradecimento e se coloque à disposição.',
   despedida: 'Despeça-se com cordialidade e deixe claro que pode voltar quando quiser.',
   confirmacao: 'Confirme que entendeu e pergunte se pode ajudar em mais alguma coisa.',
@@ -224,7 +272,11 @@ export function montarPromptSocial(promptDoTenant: string, categoria: CategoriaS
     '3. NUNCA cite preço, horário, prazo, endereço, telefone ou qualquer outro dado do ' +
       'negócio. Nesta mensagem você NÃO recebeu documento nenhum: qualquer dado que ' +
       'escrever será invenção.',
-    '4. Não repita uma frase que você já tenha usado antes nesta conversa.',
+    // Esta regra já foi "não repita uma frase que você já tenha usado". Assim
+    // ela brigava com a forma pedida na regra 1 e empurrava o modelo a inventar
+    // uma abertura nova a cada vez — que é como a saudação ficou largada.
+    '4. Varie as palavras em relação ao que você já disse nesta conversa. A forma pedida na ' +
+      'regra 1 pode repetir.',
     '5. NÃO diga que vai chamar alguém da equipe. Um cumprimento não precisa de atendente.',
     '6. Não tente vender, agendar nem processar pagamento.',
   ].join('\n');
