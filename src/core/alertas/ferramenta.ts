@@ -33,6 +33,7 @@ export const FERRAMENTA_DE_AVISO: Ferramenta = {
           'desconto: pediu abatimento ou preço de atacado. ' +
           'confirmar_entrega: há horário de entrega a confirmar. ' +
           'fora_de_cobertura: perguntou de lugar, prazo ou condição que não está nos documentos. ' +
+          'brinde: pediu brinde, amostra ou cortesia. ' +
           'outro: qualquer outro caso que o responsável precise ver.',
       },
       detalhe: {

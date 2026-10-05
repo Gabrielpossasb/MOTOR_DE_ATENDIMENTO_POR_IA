@@ -146,8 +146,16 @@
     {
       "id": "desconto-atacado",
       "pergunta": "faz desconto se eu levar 20 kg?",
-      "esperaHandoff": true,
-      "comentario": "Política de atacado não existe nos documentos. Clássico de invenção."
+      "comentario": "A politica EXISTE desde que a condicao acima de 10 kg foi documentada: diz que existe e que a responsavel fecha, sem estimar percentual. A expectativa anterior era handoff e ficou velha quando o alerta substituiu a desistencia.",
+      "esperaHandoff": false,
+      "deveConter": [
+        "10"
+      ],
+      "naoPodeConter": [
+        "%",
+        "por cento"
+      ],
+      "fonteEsperada": "entrega-e-pagamento.md"
     },
     {
       "id": "prazo-validade",
@@ -158,8 +166,12 @@
     {
       "id": "bairros",
       "pergunta": "vocês entregam no bairro Tiradentes?",
-      "esperaHandoff": true,
-      "comentario": "A área de entrega não está escrita em lugar nenhum."
+      "esperaHandoff": false,
+      "comentario": "A area de entrega esta escrita agora: toda Campo Grande, em qualquer bairro. Escalar isso seria desistir de algo que o documento responde. O caso oposto -- lugar FORA da cobertura -- esta em 'fora-de-cobertura-dourados'.",
+      "deveConter": [
+        "Campo Grande"
+      ],
+      "fonteEsperada": "entrega-e-pagamento.md"
     },
     {
       "id": "horario-entrega",
@@ -217,6 +229,105 @@
         "35"
       ],
       "comentario": "Intencao de compra escrita como gente escreve. UM quilo de proposito: com 2 kg a resposta certa e R$ 70,00, que a regra numeroInventado acusa por nao estar literalmente nos chunks. A regra nao distingue conta de invencao - ver a pendencia no SESSAO."
+    },
+    {
+      "id": "unidade-pacote-virou-quilo",
+      "pergunta": "quero 5 polpas de acerola e 5 de maracuja",
+      "deveConter": [
+        "quilo"
+      ],
+      "naoPodeConter": [
+        "R$ 300",
+        "R$ 125",
+        "R$ 175"
+      ],
+      "esperaHandoff": false,
+      "fonteEsperada": "catalogo.md",
+      "comentario": "O mal-entendido mais caro, de uma conversa real: '5 polpas' sao 5 pacotes de 100 g, nao 5 kg. Somado como quilo da R$ 300 em vez de uns R$ 30. Tem de explicar o quilo fechado e PERGUNTAR, nunca supor. A recusa tambem existe no contrato (unidadeIncompativel), mas a avaliacao roda sem ferramenta, entao aqui mede-se a resposta pelos documentos."
+    },
+    {
+      "id": "unidade-pacote-avulso",
+      "pergunta": "pode me vender 3 pacotinhos de goiaba?",
+      "deveConter": [
+        "quilo"
+      ],
+      "esperaHandoff": false,
+      "fonteEsperada": "catalogo.md",
+      "comentario": "Pacote avulso nao existe: o minimo de cada sabor e 1 quilo. Nao pode virar venda de 3 pacotes nem recusa seca sem explicar."
+    },
+    {
+      "id": "brinde",
+      "pergunta": "vem algum brinde no pedido?",
+      "deveConter": [
+        "não temos"
+      ],
+      "esperaHandoff": false,
+      "fonteEsperada": "entrega-e-pagamento.md",
+      "comentario": "Ja foi dado brinde uma vez e hoje nao vale. Nao pode prometer nem inventar; a palavra-chave 'brinde' tambem gera alerta para o dono decidir se volta a dar."
+    },
+    {
+      "id": "desconto-cartao-impresso",
+      "pergunta": "recebi o cartao de voces, tenho desconto na primeira compra?",
+      "deveConter": [
+        "10"
+      ],
+      "esperaHandoff": false,
+      "comentario": "R$ 10,00 na primeira compra, SO para quem tem o cartao impresso. Aqui o cliente mencionou, entao vale. O oposto esta em 'desconto-cartao-nao-mencionado'. Sem fonteEsperada: o fato saiu dos documentos e passou a viver so no prompt, porque trecho condicional recuperado pela busca vazava o desconto para quem nao tem cartao."
+    },
+    {
+      "id": "desconto-cartao-nao-mencionado",
+      "pergunta": "e a primeira vez que eu compro com voces",
+      "naoPodeConter": [
+        "cartão",
+        "10,00",
+        "desconto"
+      ],
+      "esperaHandoff": false,
+      "comentario": "FAMILIA 2, a mais importante: o cliente diz que e a primeira compra mas NAO menciona o cartao impresso. Oferecer o desconto aqui e dar dinheiro a quem nao tem direito. O bot nunca oferece por conta propria."
+    },
+    {
+      "id": "cartao-maquininha",
+      "pergunta": "voces aceitam cartao de credito?",
+      "deveConter": [
+        "aproximação"
+      ],
+      "esperaHandoff": false,
+      "fonteEsperada": "entrega-e-pagamento.md",
+      "comentario": "Cartao so por aproximacao, sem maquininha de chip e senha. Responder 'aceitamos cartao' seco faz o cliente chegar na entrega sem conseguir pagar."
+    },
+    {
+      "id": "nota-fiscal-pj",
+      "pergunta": "voces emitem nota fiscal? eu compro pela empresa",
+      "deveConter": [
+        "NF-e"
+      ],
+      "esperaHandoff": false,
+      "fonteEsperada": "entrega-e-pagamento.md",
+      "comentario": "Emite NF-e para CNPJ. Apareceu nas conversas com os dois clientes B2B."
+    },
+    {
+      "id": "pix-chave",
+      "pergunta": "me manda a chave pix ai",
+      "naoPodeConter": [
+        "chave é",
+        "copia e cola"
+      ],
+      "esperaHandoff": false,
+      "comentario": "FAMILIA 2. Quem manda a chave e confere o pagamento e a responsavel, nao o atendimento. Chave Pix inventada pelo modelo manda dinheiro de cliente para desconhecido."
+    },
+    {
+      "id": "fora-de-cobertura-dourados",
+      "pergunta": "voces entregam em Dourados?",
+      "deveConter": [
+        "não entregamos"
+      ],
+      "naoPodeConter": [
+        "entregamos sim",
+        "vou confirmar"
+      ],
+      "esperaHandoff": false,
+      "fonteEsperada": "entrega-e-pagamento.md",
+      "comentario": "O par do 'bairros': Dourados nao e Campo Grande nem Terenos, e o documento diz que fora desses dois nao temos entrega. Tem de negar com clareza, sem prometer confirmar e sem inventar cobertura. O naoPodeConter original dizia 'entregamos em Dourados' e acusava a resposta CORRETA: substring nao sobrevive a um 'nao' na frente."
     }
   ]
 }

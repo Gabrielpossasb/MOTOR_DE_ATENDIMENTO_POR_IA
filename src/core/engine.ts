@@ -14,6 +14,7 @@ import type { Ferramenta, RespostaDoLlm, TurnoDeFerramenta } from './llm/client.
 import { FERRAMENTA_DE_AVISO, executarAviso } from './alertas/ferramenta.js';
 import {
   FERRAMENTAS_DO_PEDIDO,
+  avisoDeUnidade,
   executarFerramentaDoPedido,
 } from './pedido/ferramentas.js';
 import { carregarCatalogoDeProdutos } from './pedido/catalogo-de-produtos.js';
@@ -359,6 +360,19 @@ export class Motor {
     const pedidoAtual =
       comPedido && conversa ? this.pedidoParaOPrompt(tenant.slug, conversa.id) : undefined;
 
+    // Rede determinística de unidade: "5 polpas" não pode virar 5 quilos. Roda
+    // sobre o texto do cliente, antes de qualquer chamada paga, porque a regra
+    // de prompt sozinha erra 1 em 5 vezes — medido. Ver `avisoDeUnidade`.
+    //
+    // Depende de `vende`, e NÃO de haver conversa: o aviso é sobre o texto do
+    // cliente e o catálogo, não sobre o carrinho. Quem pergunta "quanto fica 5
+    // polpas?" na primeira mensagem precisa dele tanto quanto quem já está
+    // montando pedido — e é assim que a suíte paga consegue medi-lo, já que ela
+    // roda sem conversa.
+    const unidade = ajustes.vende
+      ? avisoDeUnidade(carregarCatalogoDeProdutos(tenant.slug), textoDaPergunta)
+      : undefined;
+
     const resposta = await this.conversarComFerramentas({
       promptDoSistema: montarPromptDoSistema(
         tenant.promptDoSistema,
@@ -367,7 +381,7 @@ export class Motor {
         comFerramentas ? regrasDaAgenda(hojeParaOPrompt()) : undefined,
         ferramentasOferecidas.length > 0 ? regrasDeAviso() : undefined,
         comPedido ? regrasDoPedido() : undefined,
-        pedidoAtual,
+        juntarBlocos(pedidoAtual, unidade),
       ),
       mensagem: montarMensagemComContexto(textoDaPergunta, relevantes, incerto),
       historico: contexto.historico,
@@ -397,6 +411,7 @@ export class Motor {
               tenantSlug: tenant.slug,
               contatoId,
               semPersistir: !persistir,
+              mensagemDoCliente: textoDaPergunta,
               ...(conversa ? { conversaId: conversa.id } : {}),
             },
             nome,
@@ -820,6 +835,12 @@ export function pediuAjudaHumana(texto: string): boolean {
     normalizado.includes(normalizar(config.resposta.fraseDeHandoff)) ||
     normalizado.includes(normalizar(config.resposta.marcadorDeHandoff))
   );
+}
+
+/** Junta os blocos de prompt que existem, ou `undefined` se nenhum existe. */
+function juntarBlocos(...blocos: (string | undefined)[]): string | undefined {
+  const presentes = blocos.filter((b): b is string => b !== undefined && b.length > 0);
+  return presentes.length === 0 ? undefined : presentes.join('\n\n');
 }
 
 /** Converte os chunks usados nas fontes citadas ao usuário, sem repetir arquivo. */

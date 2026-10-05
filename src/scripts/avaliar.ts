@@ -102,6 +102,7 @@ async function principal(): Promise<void> {
         execucao,
         limiar: ajustes.limiarDeConfianca,
         maximoDeLinhas: ajustes.maximoDeLinhas,
+        promptDoTenant: tenant.promptDoSistema,
         detalhar: repeticoes === 1,
       });
 

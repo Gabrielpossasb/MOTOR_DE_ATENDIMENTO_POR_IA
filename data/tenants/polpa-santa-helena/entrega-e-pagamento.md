@@ -37,14 +37,31 @@ Para confirmar uma venda precisamos de quatro informações:
 3. O dia e o horário em que a pessoa pode receber.
 4. A forma de pagamento.
 
-## Desconto e pedidos grandes
+## Desconto por quantidade
 
 A partir de 10 quilos existe condição especial, combinada caso a caso com a
 responsável. O valor do desconto não é fixo e não deve ser informado por
 estimativa: quem fecha é a responsável.
 
-Abaixo de 10 quilos valem os preços de tabela.
+Abaixo de 10 quilos valem os preços de tabela. Se o cliente pedir desconto num
+pedido menor que isso, quem decide é a responsável — o atendimento não concede
+por conta própria, e avisa ela do pedido.
+
+## Brinde
+
+Por enquanto não temos brinde. Já foi dado em uma ocasião, e não é uma condição
+que vale hoje.
+
+Se o cliente perguntar, a resposta é que por enquanto não temos, e a responsável
+é avisada de que alguém perguntou.
 
 ## Formas de pagamento
 
 Aceitamos Pix, dinheiro e cartão. Todos podem ser pagos na entrega.
+
+Cartão: só por aproximação. No momento não temos maquininha de chip e senha.
+
+Pix: quem envia a chave e quem confere o pagamento é a responsável, não o
+atendimento. O atendimento anota que a forma escolhida foi Pix e segue.
+
+Para empresa (CNPJ), emitimos NF-e.

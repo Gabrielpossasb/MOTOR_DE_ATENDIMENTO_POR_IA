@@ -1395,6 +1395,138 @@ pergunta.
 
 ---
 
+## Calibrado com conversas reais de WhatsApp (2026-10-04)
+
+O dono mandou analisar 35 prints de conversas reais da Polpa com oito clientes —
+varejo de primeira compra, varejo recorrente, orçamento por indicação, prospect
+e dois clientes B2B. A instrução que governou o trabalho foi dele: **"quero que
+ele atenda todas as pessoas, não algo específico para essas conversas, elas
+estão sendo usadas como modo de calibrar melhor"**.
+
+### O achado que vale mais que todo o resto: pacote não é quilo
+
+Numa conversa real, o cliente pediu *"05 polpas de acerola, 05 de maracujá"*
+querendo cinco pacotes de 100 g de cada. Quem pegou foi a dona: *"no caso nós
+vendemos apenas o kg fechado, seria 5kg de cada?"*. O cliente respondeu *"não, 5
+KG é muito"* e refez o pedido.
+
+Somado como quilo, isso é **R$ 300,00 em vez de uns R$ 30,00** — e nem é
+vendável, porque só sai quilo fechado. Posto na suíte paga, o bot cometia o erro:
+
+> **quero 5 polpas de acerola e 5 de maracuja**
+> *5 kg de acerola e 5 kg de maracujá, R$ 300,00 no total*
+
+**Três redes, porque uma não bastou.** A ordem em que elas foram descobertas é o
+ponto:
+
+1. **Documento** (`catalogo.md`, seção "Pacote e quilo são coisas diferentes").
+   Não segurou: o bot respondeu R$ 300,00 mesmo com a seção indexada.
+2. **Contrato** — `adicionar_ao_pedido` recusa quando o cliente conta em pacotes
+   um produto vendido por quilo. Cobre o caminho do pedido, e **não cobre** quem
+   só pergunta o preço: ali o modelo responde sem ferramenta nenhuma.
+3. **Rede determinística no prompt** — `avisoDeUnidade` roda sobre o texto do
+   cliente, antes de qualquer chamada paga, e injeta o aviso. É a mesma forma da
+   rede de palavra-chave dos alertas, que nasceu do mesmo problema: o modelo
+   esquece de chamar a ferramenta.
+
+A medição de estabilidade é que mostrou a necessidade da terceira. Com uma
+rodada só, 33/35 e parecia resolvido. Em cinco rodadas:
+
+```
+Estabilidade:  91.4%     OSCILARAM: 3
+```
+
+`unidade-pacote-virou-quilo` passava em 4 de 5 execuções. **Regra de prompt é
+probabilística**, e aqui o preço do 1-em-5 é dizer R$ 300,00 a um cliente. Com a
+rede determinística: **estabilidade 100%, zero oscilação**.
+
+### Regra condicional não mora em documento
+
+O desconto de R$ 10,00 da primeira compra só vale para quem recebeu o cartão
+impresso, e o bot nunca pode oferecer por conta própria. Documentado, vazou de um
+jeito sutil:
+
+> **é a primeira vez que eu compro com vocês**
+> *O desconto de R$ 10,00 é só pra quem recebeu o cartão impresso. Você recebeu
+> esse cartão?*
+
+Ele não ofereceu — mas **ensinou quem não tem a dizer que tem**. A causa é a
+busca: o trecho chegava com similaridade 0,672 em "primeira compra" e pedia para
+ser usado.
+
+A regra saiu dos documentos e foi para o `promptDoSistema`, onde está sempre
+presente e vem junto da proibição. Princípio que ficou: **fato incondicional nos
+documentos, regra condicional no prompt** — trecho condicional recuperado por
+similaridade é trecho que vaza.
+
+### Isso expôs um falso positivo na checagem de número inventado
+
+Com o fato fora dos documentos, a resposta CERTA passou a falhar: a checagem
+compara todo valor em reais contra os **chunks recuperados**, e "R$ 10,00" não
+estava em nenhum. Ela acusou invenção de um número que o dono do negócio
+escreveu.
+
+O `promptDoSistema` do tenant passou a contar como texto autorizado. Número que
+o cliente configurou não é invenção do modelo — e o comentário da própria regra
+já dizia que falso positivo em regra de segurança ensina a ignorar o aviso.
+
+### O que eu NÃO fiz do plano, e por quê
+
+O plano pedia um bloco de vocabulário fechado tirado dos prints — "Maravilha",
+"Opa maravilha", "Prontinho", "ook" — mais exemplos few-shot das conversas.
+
+Isso foi recusado por duas razões. A primeira é a instrução do dono: oito
+conversas são calibração, não alvo, e clonar o idioleto de uma pessoa não é o
+mesmo que atender bem todo mundo. A segunda é medida: dois dias antes, o bot
+abriu três mensagens seguidas com *"Perfeito, Pedro."* — **lista fechada de
+aberturas piora repetição, não melhora**.
+
+O que entrou no lugar foi o princípio por trás do estilo: uma ideia por mensagem
+(já existia), sem markdown, emoji raro e só no fim, variar as aberturas, tratar o
+cliente como ele se apresentou, e falar das regras no plural.
+
+### O que era regra de segurança disfarçada de estilo
+
+A parte mais valiosa da observação de estilo não era estilo: era que **o bot não
+está em lugar nenhum fisicamente**. Nos prints, quem separa, leva, entrega e
+recebe é a dona. Então viraram proibição explícita: *"estou a caminho"*, *"estou
+aqui na frente"*, *"vou separar e levo"*, *"te aviso quando sair para entrega"*,
+*"volto para receber"*. Mais: não pedir comprovante, não mandar chave Pix, não
+tratar de nota fiscal.
+
+Isso generaliza para qualquer cliente que tenha uma pessoa fazendo trabalho
+físico, que é o caso de quase todo negócio pequeno.
+
+### Fatos de negócio que faltavam
+
+Cartão só por aproximação (sem maquininha de chip e senha), NF-e para CNPJ, Pix
+com a chave e a conferência pela responsável, brinde "por enquanto não temos" com
+alerta, e desconto abaixo de 10 kg que o atendimento não concede — avisa.
+
+`TipoDeAlerta` ganhou `brinde`, e não `outro`, porque é pergunta recorrente de
+resposta mutável: o dono quer contar quantos perguntam para decidir se volta a
+dar. Em `outro` isso ficaria escondido.
+
+### Números
+
+| | antes | depois |
+|---|---|---|
+| perguntas na suíte | 26 | 35 |
+| acurácia | 85,3% | **97,1%** |
+| estabilidade (5 rodadas) | 91,4% | **100%** |
+| oscilaram | 3 | **0** |
+
+Duas expectativas velhas foram corrigidas, não o código: `desconto-atacado` e
+`bairros` esperavam handoff de coisas que os documentos passaram a responder.
+
+Sobra **uma** falha, e ela é antiga: `conserta-geladeira` ainda escala em vez de
+negar. É a mesma família do `pizza` da clínica, mora na regra 3 global e mexer
+nela obriga a remedir a clínica.
+
+Clínica conferida depois de tudo: **100% (28/28)**, inalterada.
+
+---
+
 ## Fora de escopo nesta fase
 
 Confirmado com o usuário, não fazer:

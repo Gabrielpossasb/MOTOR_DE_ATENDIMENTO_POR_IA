@@ -23,6 +23,21 @@ export interface DependenciasDaSuite {
   tenantId: number;
   /** Limiar em vigor. Vai no registro para o log dizer contra o que foi medido. */
   limiar: number;
+  /**
+   * O `promptDoSistema` do tenant, para a checagem de número inventado.
+   *
+   * Sem isto a checagem acusa invenção de um dado que o DONO escreveu. Medido:
+   * a regra do desconto de R$ 10,00 do cartão impresso saiu dos documentos e
+   * passou a viver só no prompt -- porque trecho condicional recuperado pela
+   * busca vazava o desconto para quem não tem cartão. A resposta certa ("quem
+   * recebeu o cartão tem R$ 10,00 de desconto") passou a falhar, porque
+   * "R$ 10,00" não estava em nenhum chunk.
+   *
+   * Número que o cliente configurou no prompt não é invenção do modelo. Falso
+   * positivo numa regra de segurança é pior que regra nenhuma: ensina a ignorar
+   * o aviso.
+   */
+  promptDoTenant?: string;
   /** Teto de linhas do tenant. Ausente = o default global. */
   maximoDeLinhas?: number;
   /** Id da execução, gravado em cada registro. */
@@ -44,7 +59,12 @@ export async function rodarPergunta(
   // A checagem de número inventado compara contra o texto REAL dos chunks, não
   // contra o nome do arquivo — senão qualquer preço passaria.
   const contexto = textoDosChunksCitados(deps.db, deps.tenantId, resposta.fontes);
-  const verificacao = verificar(esperado, resposta, contexto, deps.maximoDeLinhas);
+
+  // O prompt do tenant entra junto como texto AUTORIZADO: é fonte escrita pelo
+  // dono do negócio, não invenção do modelo. Ver `promptDoTenant`.
+  const autorizado = deps.promptDoTenant ? `${contexto}
+${deps.promptDoTenant}` : contexto;
+  const verificacao = verificar(esperado, resposta, autorizado, deps.maximoDeLinhas);
 
   return {
     execucao: deps.execucao,

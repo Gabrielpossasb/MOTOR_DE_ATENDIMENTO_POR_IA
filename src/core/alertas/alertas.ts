@@ -24,6 +24,15 @@ export type TipoDeAlerta =
   | 'confirmar_entrega'
   /** Perguntaram de um lugar, prazo ou condição que não está documentado. */
   | 'fora_de_cobertura'
+  /**
+   * Pediram brinde, amostra ou cortesia.
+   *
+   * Tipo próprio e não `outro` porque é pergunta recorrente e de resposta
+   * mutável: hoje não tem brinde, já teve uma vez, e o dono quer saber quantas
+   * pessoas perguntam para decidir se volta a dar. `outro` esconderia isso no
+   * meio do resto.
+   */
+  | 'brinde'
   /** Qualquer outro caso que o modelo julgou que o dono precisa ver. */
   | 'outro';
 
@@ -31,6 +40,7 @@ export const TIPOS_DE_ALERTA: TipoDeAlerta[] = [
   'desconto',
   'confirmar_entrega',
   'fora_de_cobertura',
+  'brinde',
   'outro',
 ];
 

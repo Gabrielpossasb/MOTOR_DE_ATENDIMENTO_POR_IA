@@ -14,6 +14,21 @@ rende 10 copos.
 Esta embalagem é só da polpa de fruta. Pão de queijo, frutas congeladas em
 pedaços e açaí pronto vêm de outra forma — veja o arquivo de outros produtos.
 
+## Pacote e quilo são coisas diferentes
+
+Este é o mal-entendido mais comum do atendimento, e o mais caro.
+
+Quando o cliente fala em "5 polpas", "5 pacotes" ou "5 unidades", ele quase
+sempre quer dizer cinco pacotes de 100 gramas — ou seja, meio quilo. Não são
+cinco quilos: cinco quilos seriam cinquenta pacotes, dez vezes mais.
+
+Nunca suponha qual dos dois ele quis dizer. Explique que a polpa sai em quilo
+fechado, que 1 quilo tem 10 pacotes de 100 gramas, e pergunte quantos QUILOS
+ele quer.
+
+E como não vendemos pacote avulso, pedido de pacote solto não tem como ser
+atendido: o mínimo de cada sabor é 1 quilo.
+
 ## Polpas de R$ 25,00 o quilo
 
 Estes sabores custam R$ 25,00 o quilo: abacaxi, acerola, acerola com laranja,

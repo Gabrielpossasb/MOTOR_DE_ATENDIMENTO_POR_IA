@@ -23,7 +23,11 @@ import {
   carregarCatalogoDeProdutos,
   emReais,
   nomesDoCatalogo,
+  resolverProduto,
+  type CatalogoDeProdutos,
+  type Produto,
 } from './catalogo-de-produtos.js';
+import { normalizar } from '../texto.js';
 import {
   adicionarItem,
   anotarDados,
@@ -133,6 +137,93 @@ export interface ContextoDasFerramentasDoPedido {
   conversaId?: number;
   /** Modo seco: a avaliação não pode gravar pedido no banco do cliente. */
   semPersistir: boolean;
+  /**
+   * O que o cliente escreveu neste turno.
+   *
+   * Entra aqui só para a checagem de unidade: quando ele conta em PACOTES um
+   * produto vendido por QUILO, a ferramenta recusa em vez de somar. Ver
+   * `unidadeIncompativel`.
+   */
+  mensagemDoCliente?: string;
+}
+
+/**
+ * O cliente contou em pacotes/unidades um produto vendido por QUILO?
+ *
+ * É o mal-entendido mais caro deste negócio, tirado de uma conversa real: o
+ * cliente pediu *"05 polpas de acerola, 05 de maracujá"* querendo cinco pacotes
+ * de 100 g de cada. Lido como 5 kg de cada, viram R$ 300 em vez de uns R$ 30 —
+ * e nem é vendável, porque só sai quilo fechado. Na conversa real quem pegou
+ * foi a dona, perguntando *"seria 5kg de cada?"*; o cliente respondeu *"não, 5
+ * kg é muito"* e refez o pedido.
+ *
+ * A checagem exige que a mensagem conte em pacotes E **não** mencione quilo
+ * nenhum. Sem essa segunda metade, "1 kg de acerola e 2 pacotes de pão de
+ * queijo" faria a acerola ser recusada por causa do pão de queijo — e pedido
+ * com duas unidades diferentes na mesma frase é comum.
+ *
+ * Produto cuja unidade JÁ É o pacote (o pão de queijo vem em pacote de 1 kg)
+ * não entra nisto: ali "2 pacotes" é exatamente o que o cliente quis dizer.
+ */
+/**
+ * O aviso de unidade que vai no prompt, antes de o modelo responder.
+ *
+ * É a SEGUNDA rede, e ela existe porque a primeira é probabilística. Medido em
+ * 5 rodadas da suíte paga: com a regra só no prompt e nos documentos, "quero 5
+ * polpas de acerola e 5 de maracujá" foi respondido como 5 kg de cada — R$
+ * 300,00 — em 1 de cada 5 execuções. A recusa de `adicionar_ao_pedido` cobre o
+ * caminho do pedido, mas não cobre o cliente que só pergunta o preço: ali o
+ * modelo responde sem chamar ferramenta nenhuma, e não há contrato no meio.
+ *
+ * Então o aviso é injetado por código, a partir do texto do cliente, da mesma
+ * forma que a rede de palavra-chave dos alertas — que também nasceu de o modelo
+ * esquecer de chamar a ferramenta.
+ *
+ * Procura o produto citado para não avisar errado: o pão de queijo vem em
+ * pacote de 1 kg, então ali "2 pacotes" são 2 quilos e não há nada a corrigir.
+ */
+export function avisoDeUnidade(
+  catalogo: CatalogoDeProdutos,
+  mensagemDoCliente: string,
+): string | undefined {
+  const citados = catalogo.produtos.filter((p) =>
+    [p.nome, ...p.termos].some((termo) => contemTermo(mensagemDoCliente, termo)),
+  );
+
+  const porQuilo = citados.filter((p) => unidadeIncompativel(p, mensagemDoCliente));
+  if (porQuilo.length === 0) return undefined;
+
+  const nomes = porQuilo.map((p) => p.nome).join(', ');
+
+  return [
+    'ATENÇÃO — UNIDADE:',
+    `O cliente contou em pacotes/unidades, e isto é vendido por QUILO fechado: ${nomes}.`,
+    'Ele quase certamente NÃO quer esse número em quilos: 1 quilo tem 10 pacotes de 100 g, ' +
+      'então o que ele pediu é dez vezes menos. Somar como quilo multiplica o pedido por dez.',
+    'NÃO dê preço e NÃO monte pedido com esse número. Explique o quilo fechado e PERGUNTE ' +
+      'quantos quilos ele quer.',
+  ].join('\n');
+}
+
+/** O termo aparece na mensagem como palavra inteira. */
+function contemTermo(mensagem: string, termo: string): boolean {
+  const t = normalizar(termo);
+  if (t.length === 0) return false;
+  return new RegExp(`(^|[^a-z0-9])${t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}([^a-z0-9]|$)`).test(
+    normalizar(mensagem),
+  );
+}
+
+export function unidadeIncompativel(produto: Produto, mensagemDoCliente: string): boolean {
+  if (!produto.unidade.startsWith('kg')) return false;
+
+  const contaEmPacotes =
+    /\d+\s*(pacote|pacotes|unidade|unidades|sach[êe]|sach[êe]s|saquinho|saquinhos|polpa|polpas|pote|potes)\b/i.test(
+      mensagemDoCliente,
+    );
+  const mencionaQuilo = /\d+\s*(kg|quilo|quilos|kilo|kilos|k\b)/i.test(mensagemDoCliente);
+
+  return contaEmPacotes && !mencionaQuilo;
 }
 
 /** Executa uma ferramenta de pedido. Nunca lança: erro vira texto para o modelo. */
@@ -187,6 +278,24 @@ export function executarFerramentaDoPedido(
 
       if (produto.length === 0) {
         return JSON.stringify({ ok: false, erro: 'produto é obrigatório.' });
+      }
+
+      // A unidade e conferida ANTES de somar, porque somar errado aqui e o erro
+      // mais caro que este negocio comete.
+      const resolvido = resolverProduto(catalogo, produto);
+      if (
+        resolvido.tipo === 'achado' &&
+        ctx.mensagemDoCliente !== undefined &&
+        unidadeIncompativel(resolvido.produto, ctx.mensagemDoCliente)
+      ) {
+        return JSON.stringify({
+          ok: false,
+          erro:
+            `O cliente contou em pacotes, mas ${resolvido.produto.nome} é vendida por QUILO ` +
+            `fechado — 1 kg tem 10 pacotes de 100 g, e não vendemos pacote avulso. ` +
+            `NÃO suponha a quantidade: explique isso e PERGUNTE quantos quilos ele quer. ` +
+            `Cuidado, a diferença é grande: 5 pacotes são meio quilo, 5 quilos são 50 pacotes.`,
+        });
       }
 
       const r = adicionarItem(contexto, produto, quantidade);

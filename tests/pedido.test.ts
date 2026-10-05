@@ -38,7 +38,9 @@ import {
 } from '../src/core/pedido/pedido-service.js';
 import {
   FERRAMENTAS_DO_PEDIDO,
+  avisoDeUnidade,
   executarFerramentaDoPedido,
+  unidadeIncompativel,
 } from '../src/core/pedido/ferramentas.js';
 import { montarPainel } from '../src/core/painel/painel-service.js';
 
@@ -484,6 +486,107 @@ describe('as ferramentas', () => {
       'forma_de_pagamento',
       'confirmado',
     ]);
+  });
+});
+
+describe('pacote não é quilo', () => {
+  // O mal-entendido mais caro deste negócio, tirado de uma conversa real de
+  // WhatsApp: o cliente pediu "05 polpas de acerola, 05 de maracujá" querendo
+  // cinco pacotes de 100 g de cada. Somado como 5 kg daria R$ 300 em vez de uns
+  // R$ 30 — e nem é vendável, porque só sai quilo fechado. Quem pegou foi a
+  // dona, perguntando "seria 5kg de cada?".
+  function chamar(argumentos: Record<string, unknown>, mensagem: string): Record<string, unknown> {
+    return JSON.parse(
+      executarFerramentaDoPedido(
+        {
+          db,
+          tenantId,
+          tenantSlug: SLUG,
+          contatoId: 'contato-1',
+          conversaId,
+          semPersistir: false,
+          mensagemDoCliente: mensagem,
+        },
+        'adicionar_ao_pedido',
+        argumentos,
+      ),
+    );
+  }
+
+  it('RECUSA somar quando o cliente contou em pacotes', () => {
+    const r = chamar(
+      { produto: 'polpa de acerola', quantidade: 5 },
+      '05 polpas de acerola, 05 de maracuja',
+    );
+
+    expect(r.ok).toBe(false);
+    expect(String(r.erro)).toContain('PERGUNTE quantos quilos');
+    expect(rascunhoDaConversa(db, conversaId)).toBeUndefined();
+  });
+
+  it('a recusa diz o tamanho do erro, para o bot explicar', () => {
+    const r = chamar({ produto: 'polpa de goiaba', quantidade: 3 }, 'quero 3 pacotes de goiaba');
+
+    expect(String(r.erro)).toContain('5 pacotes são meio quilo');
+  });
+
+  it('aceita quando o cliente fala em QUILO', () => {
+    const r = chamar({ produto: 'polpa de acerola', quantidade: 5 }, 'quero 5 kg de acerola');
+
+    expect(r.ok).toBe(true);
+    expect(r.total).toBe('R$ 125,00');
+  });
+
+  it('NÃO recusa o pão de queijo, cuja unidade JÁ É o pacote', () => {
+    // "2 pacotes de pão de queijo" é exatamente o que o cliente quis dizer:
+    // o produto vem em pacote fechado de 1 kg.
+    const r = chamar({ produto: 'pão de queijo', quantidade: 2 }, '2 pacotes de pao de queijo');
+
+    expect(r.ok).toBe(true);
+    expect(r.total).toBe('R$ 50,00');
+  });
+
+  it('NÃO recusa quando a mensagem mistura as duas unidades', () => {
+    // "1 kg de acerola e 2 pacotes de pão de queijo" é pedido comum. Sem a
+    // segunda metade da checagem, a acerola seria recusada por causa do pão de
+    // queijo que está na mesma frase.
+    const r = chamar(
+      { produto: 'polpa de acerola', quantidade: 1 },
+      '1 kg de acerola e 2 pacotes de pao de queijo',
+    );
+
+    expect(r.ok).toBe(true);
+  });
+
+  it('a SEGUNDA rede avisa no prompt, antes de qualquer chamada paga', () => {
+    // A recusa da ferramenta cobre o caminho do pedido. Não cobre o cliente que
+    // só pergunta o preço: ali o modelo responde sem chamar ferramenta nenhuma
+    // e não há contrato no meio. Medido em 5 rodadas da suíte paga, a regra só
+    // no prompt errava 1 em 5 — respondia "5 kg de cada, R$ 300,00".
+    const aviso = avisoDeUnidade(catalogo, 'quero 5 polpas de acerola e 5 de maracuja');
+
+    expect(aviso).toBeDefined();
+    expect(aviso).toContain('polpa de acerola');
+    expect(aviso).toContain('PERGUNTE');
+    expect(aviso).toContain('dez vezes menos');
+  });
+
+  it('a segunda rede fica calada quando não há o que corrigir', () => {
+    expect(avisoDeUnidade(catalogo, 'quero 5 kg de acerola')).toBeUndefined();
+    expect(avisoDeUnidade(catalogo, '2 pacotes de pao de queijo')).toBeUndefined();
+    expect(avisoDeUnidade(catalogo, 'bom dia, voces entregam hoje?')).toBeUndefined();
+    // Produto nenhum citado: contar pacotes de algo que não vendemos não é
+    // problema de unidade, é produto inexistente — e isso tem outra recusa.
+    expect(avisoDeUnidade(catalogo, 'quero 3 pacotes de manga')).toBeUndefined();
+  });
+
+  it('a checagem é por produto, não por texto solto', () => {
+    const catalogoLocal = catalogo;
+    const polpa = catalogoLocal.produtos.find((p) => p.chave === 'polpa-acerola');
+    const pao = catalogoLocal.produtos.find((p) => p.chave === 'pao-de-queijo');
+
+    expect(polpa && unidadeIncompativel(polpa, '5 polpas de acerola')).toBe(true);
+    expect(pao && unidadeIncompativel(pao, '5 pacotes de pao de queijo')).toBe(false);
   });
 });
 
