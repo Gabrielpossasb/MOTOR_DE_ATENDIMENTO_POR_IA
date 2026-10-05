@@ -45,7 +45,9 @@ export type TipoDeProblema =
   /** O cliente pediu o total e a resposta não traz valor nenhum. */
   | 'nao_somou'
   /** Disse ao cliente que anotou algo, sem ter chamado a ferramenta que anota. */
-  | 'afirmou_ter_anotado';
+  | 'afirmou_ter_anotado'
+  /** O cliente deu um dado novo e o bot respondeu sem gravar nada. */
+  | 'nao_gravou_o_dado';
 
 export interface ProblemaDaConversa {
   tipo: TipoDeProblema;
@@ -460,15 +462,21 @@ export function auditarConversa(
   let clienteEntregouDado = false;
   /** O que o bot pediu no turno anterior. Serve para reconhecer ESTREITAMENTO. */
   let pedidosDoTurnoAnterior = new Set<string>();
+  /** Dados que o cliente acabou de informar pela PRIMEIRA vez. */
+  let dadosNovosDoCliente = new Set<string>();
 
   let turno = 0;
 
   for (const mensagem of mensagens) {
     if (mensagem.papel === 'user') {
       clienteEntregouDado = false;
+      dadosNovosDoCliente = new Set<string>();
 
       for (const dado of DADOS) {
         if (clienteForneceu(dado, mensagem.conteudo, jaPedido.has(dado.id))) {
+          // NOVO quer dizer que a conversa ainda não tinha este dado. Repetir um
+          // dado já gravado não exige chamada de ferramenta nenhuma.
+          if (!jaFornecido.has(dado.id)) dadosNovosDoCliente.add(dado.id);
           jaFornecido.add(dado.id);
           clienteEntregouDado = true;
         }
@@ -578,6 +586,34 @@ export function auditarConversa(
         tipo: 'nao_somou',
         grave: true,
         detalhe: 'o cliente pediu o total e a resposta não trouxe valor nenhum',
+      });
+    }
+
+    // O cliente deu um dado NOVO e o bot respondeu sem gravar nada.
+    //
+    // Medido na conversa 41: o cliente disse "pix", o bot respondeu "falta só o
+    // horário" com `used_tool = 0` -- deduziu o que faltava da sua propria
+    // mensagem anterior, que já estava velha. Dois turnos depois a ferramenta
+    // informou a verdade, o pix nunca tinha sido gravado, e para o cliente o
+    // bot pareceu esquecer o que ele acabara de dizer.
+    //
+    // É mais grave que o `afirmou_ter_anotado` e mais difícil de ver: ali o bot
+    // ao menos diz "anotei". Aqui ele não diz nada, e o dado simplesmente não
+    // existe.
+    if (
+      opcoes.vende === true &&
+      dadosNovosDoCliente.size > 0 &&
+      !mensagem.usouFerramenta &&
+      !RECUSA.test(mensagem.conteudo)
+    ) {
+      const quais = [...dadosNovosDoCliente]
+        .map((id) => DADOS.find((d) => d.id === id)?.rotulo ?? id)
+        .join(', ');
+
+      registrar({
+        tipo: 'nao_gravou_o_dado',
+        grave: true,
+        detalhe: `o cliente informou ${quais} e o bot respondeu sem gravar nada`,
       });
     }
 

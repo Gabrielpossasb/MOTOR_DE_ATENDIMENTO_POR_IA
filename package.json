@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Motor de atendimento por IA — núcleo agnóstico de canal, fase local",
+  "description": "Motor de atendimento por IA \u2014 n\u00facleo agn\u00f3stico de canal, fase local",
   "scripts": {
     "novo-tenant": "tsx src/scripts/novo-tenant.ts",
     "seed": "tsx src/scripts/seed-tenant.ts",
@@ -17,7 +17,7 @@
     "relatorio": "tsx src/scripts/relatorio.ts",
     "lembretes": "tsx src/scripts/lembretes.ts",
     "conversas": "tsx src/scripts/conversas.ts",
-    "web": "tsx src/adapters/web/server.ts"
+    "web": "tsx watch src/adapters/web/server.ts"
   },
   "dependencies": {
     "better-sqlite3": "^13.0.3",

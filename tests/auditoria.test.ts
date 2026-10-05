@@ -449,6 +449,57 @@ describe('não somou o pedido', () => {
   });
 });
 
+describe('o dado que o cliente deu e o bot não gravou', () => {
+  it('ACUSA responder sem chamar ferramenta depois de o cliente dar um dado', () => {
+    // Conversa 41: o cliente disse "pix", o bot respondeu "falta só o horário"
+    // com `used_tool = 0` — deduziu o que faltava da sua própria mensagem
+    // anterior. Dois turnos depois a ferramenta informou que o pix nunca tinha
+    // sido gravado, e para o cliente o bot pareceu esquecer.
+    const r = auditarVenda([
+      cliente('so isso'),
+      bot('Falta o horário que fica melhor e a forma de pagamento.', 0.5, true),
+      cliente('pix'),
+      bot('Perfeito. Falta só me dizer o horário que fica melhor.', 0.4, false),
+    ]);
+
+    const achado = r.problemas.find((p) => p.tipo === 'nao_gravou_o_dado');
+    expect(achado?.grave).toBe(true);
+    expect(achado?.detalhe).toContain('forma de pagamento');
+  });
+
+  it('NÃO acusa quando a ferramenta foi chamada', () => {
+    const r = auditarVenda([
+      cliente('so isso'),
+      bot('Falta o horário que fica melhor e a forma de pagamento.', 0.5, true),
+      cliente('pix'),
+      bot('Anotei o Pix. Falta só o horário que fica melhor.', 0.4, true),
+    ]);
+
+    expect(tipos(r).filter((t) => t === 'nao_gravou_o_dado')).toEqual([]);
+  });
+
+  it('NÃO acusa quando o cliente REPETE um dado que já estava gravado', () => {
+    // Repetir não exige gravar de novo. Só dado novo precisa de ferramenta.
+    const r = auditarVenda([
+      cliente('pago no pix'),
+      bot('Anotei o Pix.', 0.4, true),
+      cliente('pode ser no pix mesmo'),
+      bot('Perfeito, segue no Pix então.', 0.4, false),
+    ]);
+
+    expect(tipos(r).filter((t) => t === 'nao_gravou_o_dado')).toEqual([]);
+  });
+
+  it('NÃO acusa na clínica, que grava tudo de uma vez no agendamento', () => {
+    const r = auditar([
+      cliente('meu telefone e 67999359933'),
+      bot('Perfeito. Qual horário você prefere?', 0.5, false),
+    ]);
+
+    expect(tipos(r).filter((t) => t === 'nao_gravou_o_dado')).toEqual([]);
+  });
+});
+
 describe('disse que anotou e não anotou', () => {
   it('ACUSA "já anotei" sem chamada de ferramenta', () => {
     // Conversa 38: o cliente mandou "Pedro", o bot respondeu "Perfeito, já

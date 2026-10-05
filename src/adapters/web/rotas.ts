@@ -409,7 +409,14 @@ export function servirArquivo(res: http.ServerResponse, nome: string): void {
     return;
   }
 
-  res.writeHead(200, { 'Content-Type': TIPOS[path.extname(destino)] ?? 'application/octet-stream' });
+  res.writeHead(200, {
+    'Content-Type': TIPOS[path.extname(destino)] ?? 'application/octet-stream',
+    // Nunca guardar em cache, e isso custou uma sessão de confusão: a página
+    // ganhou o envio em várias mensagens, o navegador serviu o HTML velho do
+    // cache, e a conversa pareceu não ter o recurso. Numa fase em que a página
+    // muda a cada calibração, cache é só uma forma de medir o passado.
+    'Cache-Control': 'no-store, must-revalidate',
+  });
   res.end(fs.readFileSync(destino));
 }
 

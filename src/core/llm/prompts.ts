@@ -43,8 +43,17 @@ export function regrasDoBot(ajustes: AjustesDoPrompt): string {
       'pessoa perguntou por um procedimento, produto, plano ou condição que NÃO aparece ' +
       'no CONTEXTO, o preço ou prazo do item vizinho não serve — vale a regra 3, mesmo ' +
       'que o assunto geral esteja no contexto.',
-    `5. No máximo ${ajustes.maximoDeLinhas} linhas. Seja direto.`,
-    '6. Envie uma única mensagem. Nunca escreva várias mensagens seguidas.',
+    // A regra 5 já foi "no máximo N linhas, seja direto", e isso virou um
+    // problema quando cada linha passou a ser enviada como uma MENSAGEM
+    // separada: o modelo lia "economize linhas" e empacotava duas ou três
+    // ideias numa frase só. Quem conversou com o bot reclamou exatamente disso
+    // — "se não, a mensagem fica muito grande e artificial". A quebra de linha
+    // deixou de ser custo e passou a ser o recurso.
+    `5. CADA LINHA que você escrever é enviada como uma mensagem separada no WhatsApp. Então ` +
+      `separe ideias diferentes em linhas diferentes, como quem conversa: o valor numa linha, ` +
+      `a pergunta na outra. Máximo de ${ajustes.maximoDeLinhas} linhas, e cada uma curta.`,
+    '6. Não repita a mesma ideia em duas linhas. Cada linha é uma mensagem nova chegando no ' +
+      'celular da pessoa.',
     '7. Se faltam vários dados para atender a pessoa, pergunte todos de uma vez, numa frase só ' +
       '— e só os que ainda faltam.',
     // A regra 8 já foi "não tente vender nem processar pagamento" para todo
@@ -175,6 +184,41 @@ export function regrasDoPedido(): string {
   ].join('\n');
 }
 
+/**
+ * O estado do pedido, lido do banco, em TODA mensagem.
+ *
+ * Nasceu do defeito mais teimoso desta frente. Medido na conversa 41: o cliente
+ * disse `"pix"`, o bot respondeu *"falta só o horário"* sem chamar ferramenta
+ * nenhuma — deduziu o que faltava da SUA MENSAGEM ANTERIOR, que já estava
+ * velha. Dois turnos depois a ferramenta informou a verdade (o pix nunca tinha
+ * sido gravado) e, para o cliente, o bot pareceu esquecer o que ele acabara de
+ * dizer.
+ *
+ * A lição desta sessão, repetida três vezes, é que **dado concreto no prompt
+ * ganha de regra abstrata**. Então o pedido deixa de depender de o modelo
+ * lembrar ou de chamar `ver_pedido`: ele chega pronto, a cada mensagem, vindo
+ * da tabela.
+ *
+ * O bloco é propositalmente de leitura, nunca de escrita: se o cliente acabou
+ * de dizer algo que não está aqui, a discrepância fica visível na cara do
+ * modelo e o caminho para gravar é a ferramenta.
+ */
+export function pedidoAtualParaOPrompt(resumoDoPedido: string, falta: string[]): string {
+  return [
+    'PEDIDO ATUAL (lido do banco agora, nesta mensagem):',
+    resumoDoPedido,
+    falta.length === 0
+      ? 'Está tudo que o pedido precisa para fechar.'
+      : `Ainda NÃO está gravado: ${falta.join(', ')}.`,
+    '',
+    'Este bloco é a verdade sobre o pedido — mais confiável que a sua memória e que qualquer ' +
+      'coisa que você escreveu antes. NUNCA deduza o que falta a partir da sua mensagem ' +
+      'anterior.',
+    'Se o cliente disse nesta mensagem algo que NÃO aparece como gravado aqui, é porque ainda ' +
+      'não está: chame a ferramenta para gravar ANTES de responder.',
+  ].join('\n');
+}
+
 export function montarPromptDoSistema(
   promptDoTenant: string,
   ajustes: AjustesDoPrompt,
@@ -182,11 +226,13 @@ export function montarPromptDoSistema(
   agenda?: string,
   aviso?: string,
   pedido?: string,
+  pedidoAtual?: string,
 ): string {
   const partes = [promptDoTenant.trim(), regrasDoBot(ajustes)];
 
   if (agenda) partes.push(agenda);
   if (pedido) partes.push(pedido);
+  if (pedidoAtual) partes.push(pedidoAtual);
   if (aviso) partes.push(aviso);
 
   if (resumo && resumo.trim().length > 0) {

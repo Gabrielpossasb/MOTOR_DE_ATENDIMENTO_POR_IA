@@ -16,6 +16,13 @@ import {
   FERRAMENTAS_DO_PEDIDO,
   executarFerramentaDoPedido,
 } from './pedido/ferramentas.js';
+import { carregarCatalogoDeProdutos } from './pedido/catalogo-de-produtos.js';
+import {
+  comTaxa,
+  faltaParaFechar,
+  rascunhoDaConversa,
+  resumirPedido,
+} from './pedido/pedido-service.js';
 import { alertasDaMensagem, registrarAlerta } from './alertas/alertas.js';
 import { AGENDA_PADRAO } from './agenda/disponibilidade.js';
 import {
@@ -31,6 +38,7 @@ import {
   regrasDaAgenda,
   regrasDeAviso,
   regrasDoPedido,
+  pedidoAtualParaOPrompt,
 } from './llm/prompts.js';
 import { normalizar } from './texto.js';
 import { classificarTurnoSocial } from './conversation/turno-social.js';
@@ -346,6 +354,11 @@ export class Motor {
             ...(comPedido ? FERRAMENTAS_DO_PEDIDO : []),
           ];
 
+    // O pedido vai ao modelo como DADO, a cada mensagem, em vez de depender de
+    // ele lembrar ou de chamar `ver_pedido`. Ver `pedidoAtualParaOPrompt`.
+    const pedidoAtual =
+      comPedido && conversa ? this.pedidoParaOPrompt(tenant.slug, conversa.id) : undefined;
+
     const resposta = await this.conversarComFerramentas({
       promptDoSistema: montarPromptDoSistema(
         tenant.promptDoSistema,
@@ -354,6 +367,7 @@ export class Motor {
         comFerramentas ? regrasDaAgenda(hojeParaOPrompt()) : undefined,
         ferramentasOferecidas.length > 0 ? regrasDeAviso() : undefined,
         comPedido ? regrasDoPedido() : undefined,
+        pedidoAtual,
       ),
       mensagem: montarMensagemComContexto(textoDaPergunta, relevantes, incerto),
       historico: contexto.historico,
@@ -461,6 +475,24 @@ export class Motor {
       ...(conversa ? { conversaId: conversa.id } : {}),
       aguardandoHumano: false,
     };
+  }
+
+  /**
+   * O bloco "PEDIDO ATUAL" do prompt, ou `undefined` se ainda não há pedido.
+   *
+   * Carrinho vazio não vira bloco: dizer "o pedido está vazio" em toda mensagem
+   * de quem só perguntou um preço é ruído, e ainda sugere ao modelo que ele
+   * deveria estar montando algo.
+   */
+  private pedidoParaOPrompt(tenantSlug: string, conversaId: number): string | undefined {
+    const rascunho = rascunhoDaConversa(this.db, conversaId);
+    if (!rascunho || rascunho.itens.length === 0) return undefined;
+
+    const catalogo = carregarCatalogoDeProdutos(tenantSlug);
+    const pedido = comTaxa(this.db, rascunho.id, catalogo);
+    if (!pedido) return undefined;
+
+    return pedidoAtualParaOPrompt(resumirPedido(pedido), faltaParaFechar(pedido));
   }
 
   /**
