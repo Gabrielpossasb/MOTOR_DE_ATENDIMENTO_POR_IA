@@ -181,3 +181,57 @@ describe('dividirEmChunks', () => {
     expect(chunks[0]?.texto).not.toContain('\r');
   });
 });
+
+describe('comentário de markdown não vira conhecimento', () => {
+  // Quase aconteceu: um marcador de manutenção — "<!-- MUDA DE ESTADO: troque o
+  // parágrafo acima e rode npm run ingest -->" — foi indexado junto das formas
+  // de pagamento. O bot poderia responder sobre `npm run ingest` a um cliente
+  // perguntando se aceita cartão. É o mesmo motivo do prefixo `_` nos nomes de
+  // arquivo, um nível abaixo: ali o arquivo inteiro fica fora, aqui um trecho.
+  it('tira o comentário e mantém o resto da seção', () => {
+    const chunks = dividirEmChunks(
+      [
+        '## Formas de pagamento',
+        '',
+        'Cartão: estamos sem maquininha.',
+        '',
+        '<!-- MUDA DE ESTADO: troque isto quando a maquininha chegar. -->',
+        '',
+        'Pix: a responsável confere.',
+      ].join('\n'),
+    );
+
+    const texto = chunks.map((c) => c.texto).join(' ');
+    expect(texto).not.toContain('MUDA DE ESTADO');
+    expect(texto).toContain('sem maquininha');
+    expect(texto).toContain('Pix');
+  });
+
+  it('comentário de várias linhas sai inteiro', () => {
+    const chunks = dividirEmChunks(
+      ['## Entrega', '', '<!-- nota', 'em duas linhas', '-->', '', 'Entregamos em Terenos.'].join(
+        '\n',
+      ),
+    );
+
+    const texto = chunks.map((c) => c.texto).join(' ');
+    expect(texto).not.toContain('nota');
+    expect(texto).not.toContain('duas linhas');
+    expect(texto).toContain('Terenos');
+  });
+
+  it('dois comentários seguidos não engolem o que está entre eles', () => {
+    // Guloso (`[\s\S]*`) comeria de "<!--" do primeiro até "-->" do segundo,
+    // levando o preço embora.
+    const chunks = dividirEmChunks(
+      ['## Preços', '', '<!-- a -->', 'A polpa custa R$ 25,00 o quilo.', '<!-- b -->'].join('\n'),
+    );
+
+    expect(chunks.map((c) => c.texto).join(' ')).toContain('R$ 25,00');
+  });
+
+  it('documento que é SÓ comentário não gera chunk nenhum', () => {
+    expect(dividirEmChunks('<!-- rascunho, não ingerir -->')).toEqual([]);
+  });
+});
+

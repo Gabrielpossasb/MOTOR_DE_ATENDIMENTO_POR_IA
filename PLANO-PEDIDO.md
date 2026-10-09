@@ -343,27 +343,6 @@ nessa conta — já conferido acima.
 
 ---
 
-## O que o plano não previu
-
-1. **O catálogo como anexo (item 1.5) NÃO foi feito.** A reclamação de "manda o
-   catálogo" ficou aberta. Quando a Camada 1 e a Parte 2 entraram, o bot passou
-   a perguntar *"quais polpas você quer e quantos quilos"* em vez de despejar os
-   14 sabores, e o `enviar_catalogo` deixou de ser o caminho mais curto para o
-   mesmo resultado. Vale medir se ainda incomoda antes de construir.
-2. **A auditoria precisou de conserto DUAS vezes**, e a segunda não estava no
-   plano: depois de ganhar os detectores, ela passou a acusar o recapitulativo
-   *"Até agora são…"* como `repetiu_informacao` — punindo exatamente o conserto.
-   Resposta que veio de ferramenta deixou de contar. O plano previu o risco em
-   uma linha ("sem ela a auditoria puniria o recapitulativo") e ainda assim a
-   guarda escrita não bastou; só a conversa real mostrou onde.
-3. **A taxa de entrega precisou congelar** (migration 008, não prevista). A 007
-   copiava o preço do item com a justificativa de registro histórico e deixava a
-   taxa de fora — mesmo argumento, meia aplicação.
-4. **O laço do horário.** O prompt dizia "NUNCA confirme o horário da entrega" e
-   o modelo leu como "não registre o horário": o pedido não fechava e a conversa
-   repetia o pedido de horário. Anotar e confirmar precisaram ser escritos como
-   coisas diferentes.
-
 ## Questões abertas, registradas e não inventadas
 
 1. **O balde de açaí de 2 litros conta para os 2 kg de entrega grátis?** A taxa

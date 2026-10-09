@@ -62,7 +62,49 @@ Não precisa listar preços em `naoPodeConter`: **toda** resposta já passa por
 uma checagem automática que exige que qualquer valor em reais, horário, prazo
 ou porcentagem exista nos trechos recuperados.
 
-## 4. Rodar
+## 4. Fatos que mudam de estado
+
+Alguns fatos do negócio viram mentira sozinhos quando a situação muda. Eles estão
+marcados nos documentos com um comentário `<!-- MUDA DE ESTADO: ... -->`, que diz
+o que trocar e qual comando rodar. Comentário de HTML **não** vira resposta do
+bot: ele só existe para você achar o lugar.
+
+Hoje são dois:
+
+| fato | onde | quando mudar |
+|---|---|---|
+| estamos sem maquininha de cartão | `entrega-e-pagamento.md` | quando comprar a maquininha |
+| por enquanto não temos brinde | `entrega-e-pagamento.md` | se voltar a dar brinde |
+
+Para achar todos: procure por `MUDA DE ESTADO` na pasta.
+
+Depois de trocar: `npm run ingest -- polpa-santa-helena`.
+
+## 5. Descontos
+
+Os descontos que o bot **pode aplicar** ficam em `produtos.json`, na lista
+`descontos`. O bot não consegue dar nenhum desconto fora dessa lista — a
+ferramenta recusa a chave e manda ele avisar você em vez de prometer.
+
+Cada desconto tem:
+
+| campo | para que serve |
+|---|---|
+| `chave` | nome curto e estável; é o que a ferramenta aceita |
+| `nome` | como o cliente vai ler |
+| `valorCentavos` | `1000` são R$ 10,00. Em centavos para a soma não ter erro de arredondamento |
+| `exigeMencaoDoCliente` | o cliente tem de ter dito uma dessas palavras na conversa; se não disse, o desconto não sai |
+| `apenasPrimeiraCompra` | recusa se esse contato já tem pedido fechado |
+| `condicao` | a condição em português, para o bot explicar |
+
+**Desconto sem valor fixo não entra aqui.** O de acima de 10 kg é combinado caso
+a caso, então ele continua sendo alerta: o bot diz que existe condição especial,
+avisa você, e não dá número.
+
+O valor é **copiado** para o pedido no momento em que é aplicado. Mudar o valor
+aqui não reescreve pedido já fechado.
+
+## 6. Rodar
 
 ```bash
 npm run seed   -- polpa-santa-helena

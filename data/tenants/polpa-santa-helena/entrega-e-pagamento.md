@@ -55,11 +55,19 @@ que vale hoje.
 Se o cliente perguntar, a resposta é que por enquanto não temos, e a responsável
 é avisada de que alguém perguntou.
 
+<!-- MUDA DE ESTADO: se voltar a dar brinde, troque os dois parágrafos acima
+     pelo que passa a valer, e rode o ingest. -->
+
 ## Formas de pagamento
 
 Aceitamos Pix, dinheiro e cartão. Todos podem ser pagos na entrega.
 
-Cartão: só por aproximação. No momento não temos maquininha de chip e senha.
+Cartão: no momento estamos SEM maquininha, então só dá para pagar por aproximação, pelo
+celular. Não temos como passar cartão com chip e senha.
+
+<!-- MUDA DE ESTADO: quando a maquininha chegar, troque o parágrafo acima por
+     "Cartão: aceitamos crédito e débito na maquininha, e também por aproximação."
+     e rode `npm run ingest -- polpa-santa-helena`. É o único lugar que fala disso. -->
 
 Pix: quem envia a chave e quem confere o pagamento é a responsável, não o
 atendimento. O atendimento anota que a forma escolhida foi Pix e segue.

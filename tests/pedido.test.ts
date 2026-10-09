@@ -17,6 +17,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { abrirBanco, type Db } from '../src/storage/db.js';
 import { salvarTenant } from '../src/storage/repositories/tenants.js';
 import { obterOuCriarConversa } from '../src/storage/repositories/conversations.js';
+import { gravarMensagem } from '../src/storage/repositories/messages.js';
 import { config } from '../src/config.js';
 import {
   carregarCatalogoDeProdutos,
@@ -27,6 +28,7 @@ import {
 import {
   adicionarItem,
   anotarDados,
+  aplicarDesconto,
   comTaxa,
   faltaParaFechar,
   fecharPedido,
@@ -484,6 +486,7 @@ describe('as ferramentas', () => {
       'endereco',
       'horario_desejado',
       'forma_de_pagamento',
+      'desconto',
       'confirmado',
     ]);
   });
@@ -587,6 +590,137 @@ describe('pacote não é quilo', () => {
 
     expect(polpa && unidadeIncompativel(polpa, '5 polpas de acerola')).toBe(true);
     expect(pao && unidadeIncompativel(pao, '5 pacotes de pao de queijo')).toBe(false);
+  });
+});
+
+describe('desconto só sai se estiver cadastrado', () => {
+  // Decisão do dono: "o bot pode confirmar e dar o desconto, mas somente se
+  // estiver cadastrado como desconto — então são apenas descontos que estiverem
+  // cadastrados". Virou contrato: o bot não consegue inventar porque só existem
+  // os do produtos.json.
+  function pedir(): void {
+    adicionarItem(ctx, 'polpa de açaí', 2);
+  }
+
+  function clienteDisse(texto: string): void {
+    gravarMensagem(db, { conversaId, papel: 'user', conteudo: texto });
+  }
+
+  it('aplica o desconto cadastrado e abate do total', () => {
+    pedir();
+    clienteDisse('recebi o cartao de voces, tenho desconto?');
+
+    const r = aplicarDesconto(ctx, 'cartao-primeira-compra');
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+
+    expect(r.valor.desconto?.valorCentavos).toBe(1000);
+    // 2 kg de açaí = R$ 70,00, entrega grátis, menos R$ 10,00.
+    expect(r.valor.totalCentavos).toBe(6000);
+    expect(resumirPedido(r.valor)).toContain('desconto de R$ 10,00');
+  });
+
+  it('RECUSA chave que não está cadastrada, e diz quais existem', () => {
+    pedir();
+    clienteDisse('recebi o panfleto');
+
+    const r = aplicarDesconto(ctx, 'desconto-de-fidelidade');
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+
+    expect(r.motivo).toContain('não é um desconto cadastrado');
+    expect(r.motivo).toContain('cartao-primeira-compra');
+    expect(r.motivo).toContain('avisar_responsavel');
+  });
+
+  it('RECUSA quando o cliente não mencionou o cartão', () => {
+    // O vazamento medido: o bot explicava a condição e perguntava "você recebeu
+    // esse cartão?", ensinando quem não tem a dizer que tem. Como contrato, a
+    // explicação pode escapar mas o DINHEIRO não sai.
+    pedir();
+    clienteDisse('e a primeira vez que eu compro com voces');
+
+    const r = aplicarDesconto(ctx, 'cartao-primeira-compra');
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+
+    expect(r.motivo).toContain('só vale se o CLIENTE mencionar');
+    expect(rascunhoDaConversa(db, conversaId)?.desconto).toBeUndefined();
+  });
+
+  it('aceita a menção vinda de QUALQUER mensagem da conversa', () => {
+    // A menção pode ter sido dois turnos antes de o pedido ficar pronto.
+    clienteDisse('oi, recebi o cartaozinho de voces na feira');
+    clienteDisse('quero 2 kg de acai');
+    pedir();
+
+    expect(aplicarDesconto(ctx, 'cartao-primeira-compra').ok).toBe(true);
+  });
+
+  it('RECUSA na segunda compra do mesmo contato', () => {
+    // No WhatsApp o contato é o telefone, então isto vale de verdade.
+    adicionarItem(ctx, 'polpa de goiaba', 2);
+    anotarDados(ctx, {
+      nome: 'Maria',
+      endereco: 'Rua A, 1',
+      horarioDesejado: 'de manhã',
+      formaDePagamento: 'Pix',
+    });
+    fecharPedido(ctx, true);
+
+    pedir();
+    clienteDisse('recebi o cartao impresso');
+
+    const r = aplicarDesconto(ctx, 'cartao-primeira-compra');
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+    expect(r.motivo).toContain('primeira compra');
+  });
+
+  it('RECUSA desconto em pedido vazio', () => {
+    clienteDisse('recebi o cartao');
+    expect(aplicarDesconto(ctx, 'cartao-primeira-compra').ok).toBe(false);
+  });
+
+  it('o desconto CONGELA no fechamento', () => {
+    // Mesma razão do preço do item e da taxa: o pedido é registro histórico. Se
+    // o dono mudar o desconto de R$ 10,00 para R$ 15,00, pedido fechado antes
+    // não pode mostrar outro total.
+    pedir();
+    clienteDisse('recebi o cartao');
+    aplicarDesconto(ctx, 'cartao-primeira-compra');
+    anotarDados(ctx, {
+      nome: 'Maria',
+      endereco: 'Rua A, 1',
+      horarioDesejado: 'de manhã',
+      formaDePagamento: 'Pix',
+    });
+
+    const r = fecharPedido(ctx, true);
+    expect(r.ok && r.valor.totalCentavos).toBe(6000);
+
+    const outro = {
+      ...ctx,
+      catalogo: {
+        ...catalogo,
+        descontos: [{ ...catalogo.descontos[0]!, valorCentavos: 1500 }],
+      },
+    };
+    const relido = comTaxa(db, (r.ok && r.valor.id) as number, outro.catalogo);
+    expect(relido?.totalCentavos).toBe(6000);
+  });
+
+  it('a ferramenta recusa e manda avisar, sem prometer nada', () => {
+    pedir();
+    const cru = executarFerramentaDoPedido(
+      { db, tenantId, tenantSlug: SLUG, contatoId: 'contato-1', conversaId, semPersistir: false },
+      'aplicar_desconto',
+      { desconto: 'desconto-de-aniversario' },
+    );
+
+    const r = JSON.parse(cru);
+    expect(r.ok).toBe(false);
+    expect(String(r.erro)).toContain('avisar_responsavel');
   });
 });
 

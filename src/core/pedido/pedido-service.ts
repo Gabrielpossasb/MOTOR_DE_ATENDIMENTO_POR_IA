@@ -13,10 +13,13 @@
  */
 import type { Db } from '../../storage/db.js';
 import {
+  acharDesconto,
+  chavesDeDesconto,
   emReais,
   nomesDoCatalogo,
   resolverProduto,
   type CatalogoDeProdutos,
+  type Desconto,
   type Produto,
 } from './catalogo-de-produtos.js';
 
@@ -47,6 +50,8 @@ export interface Pedido {
   /** Soma dos itens, sem a taxa. */
   itensCentavos: number;
   taxaCentavos: number;
+  /** Desconto cadastrado aplicado, se houver. */
+  desconto?: { chave: string; nome: string; valorCentavos: number };
   totalCentavos: number;
   pesoKg: number;
   /**
@@ -78,6 +83,8 @@ interface LinhaDePedido {
   payment_method: string | null;
   /** Taxa congelada no fechamento. NULL enquanto e rascunho. */
   delivery_fee_cents: number | null;
+  discount_key: string | null;
+  discount_cents: number | null;
 }
 
 interface LinhaDeItem {
@@ -95,7 +102,7 @@ export function rascunhoDaConversa(db: Db, conversaId: number): Pedido | undefin
   const linha = db
     .prepare(
       `SELECT id, status, customer_name, address, preferred_time, payment_method,
-              delivery_fee_cents
+              delivery_fee_cents, discount_key, discount_cents
        FROM orders WHERE conversation_id = ? AND status = 'rascunho'`,
     )
     .get(conversaId) as LinhaDePedido | undefined;
@@ -107,7 +114,7 @@ export function pedidoPorId(db: Db, pedidoId: number): Pedido | undefined {
   const linha = db
     .prepare(
       `SELECT id, status, customer_name, address, preferred_time, payment_method,
-              delivery_fee_cents
+              delivery_fee_cents, discount_key, discount_cents
        FROM orders WHERE id = ?`,
     )
     .get(pedidoId) as LinhaDePedido | undefined;
@@ -123,7 +130,7 @@ export function pedidosConfirmados(db: Db, tenantId: number, limite = 20): Pedid
   const linhas = db
     .prepare(
       `SELECT id, status, customer_name, address, preferred_time, payment_method,
-              delivery_fee_cents
+              delivery_fee_cents, discount_key, discount_cents
        FROM orders WHERE tenant_id = ? AND status = 'confirmado'
        ORDER BY confirmed_at DESC, id DESC LIMIT ?`,
     )
@@ -172,10 +179,23 @@ function montar(db: Db, linha: LinhaDePedido, taxa?: CatalogoDeProdutos['taxaDeE
   // ele entra: o pedido é registro histórico.
   const taxaCentavos = linha.delivery_fee_cents ?? calculada;
 
+  const descontoCentavos = linha.discount_cents ?? 0;
+
   return {
     id: linha.id,
     status: linha.status as Pedido['status'],
     itens,
+    ...(linha.discount_key && descontoCentavos > 0
+      ? {
+          desconto: {
+            chave: linha.discount_key,
+            // O nome fica no catálogo; aqui vai a chave como rótulo de reserva,
+            // porque `montar` não recebe o catálogo em todos os caminhos.
+            nome: linha.discount_key,
+            valorCentavos: descontoCentavos,
+          },
+        }
+      : {}),
     dados: {
       ...(linha.customer_name ? { nome: linha.customer_name } : {}),
       ...(linha.address ? { endereco: linha.address } : {}),
@@ -184,7 +204,9 @@ function montar(db: Db, linha: LinhaDePedido, taxa?: CatalogoDeProdutos['taxaDeE
     },
     itensCentavos,
     taxaCentavos,
-    totalCentavos: itensCentavos + taxaCentavos,
+    // Nunca abaixo de zero: desconto maior que o pedido viraria o bot pagando
+    // para entregar. Se isso acontecer, o cadastro do desconto está errado.
+    totalCentavos: Math.max(0, itensCentavos + taxaCentavos - descontoCentavos),
     pesoKg,
     taxaIndefinida,
   };
@@ -195,12 +217,23 @@ export function comTaxa(db: Db, pedidoId: number, catalogo: CatalogoDeProdutos):
   const linha = db
     .prepare(
       `SELECT id, status, customer_name, address, preferred_time, payment_method,
-              delivery_fee_cents
+              delivery_fee_cents, discount_key, discount_cents
        FROM orders WHERE id = ?`,
     )
     .get(pedidoId) as LinhaDePedido | undefined;
 
-  return linha ? montar(db, linha, catalogo.taxaDeEntrega) : undefined;
+  if (!linha) return undefined;
+
+  const pedido = montar(db, linha, catalogo.taxaDeEntrega);
+
+  // `montar` nao recebe o catalogo em todos os caminhos, entao usa a chave como
+  // rotulo de reserva. Aqui da para trocar pelo nome que o cliente vai ler.
+  if (pedido.desconto) {
+    const cadastrado = acharDesconto(catalogo, pedido.desconto.chave);
+    if (cadastrado) pedido.desconto.nome = cadastrado.nome;
+  }
+
+  return pedido;
 }
 
 function garantirRascunho(
@@ -375,6 +408,103 @@ export function anotarDados(ctx: ContextoDoPedido, dados: DadosDaEntrega): Resul
   return pedido ? { ok: true, valor: pedido } : { ok: false, motivo: 'Não consegui ler o pedido.' };
 }
 
+/**
+ * Aplica um desconto CADASTRADO ao pedido.
+ *
+ * Três recusas, e as três são contrato e não prompt:
+ *
+ * 1. **Chave fora da lista.** O bot não consegue inventar desconto porque só
+ *    existem os do `produtos.json`. É a decisão do dono — "são apenas descontos
+ *    que estiverem cadastrados" — virando impossibilidade.
+ * 2. **O cliente não mencionou.** O desconto do cartão impresso exige que ele
+ *    tenha falado "cartão" ou "panfleto" em alguma mensagem desta conversa. Como
+ *    regra de prompt isso vazava: o bot explicava a condição e perguntava *"você
+ *    recebeu esse cartão?"*, ensinando quem não tem a dizer que tem. Aqui a
+ *    menção é conferida no histórico, então a explicação pode escapar mas o
+ *    DINHEIRO não sai.
+ * 3. **Não é a primeira compra.** Confere pedido confirmado anterior do mesmo
+ *    contato. No WhatsApp o contato é o telefone e isto funciona; nesta fase
+ *    local o id é aleatório por sessão, então quase nunca dispara.
+ */
+export function aplicarDesconto(ctx: ContextoDoPedido, chave: string): Resultado<Pedido> {
+  const atual = rascunhoDaConversa(ctx.db, ctx.conversaId);
+  if (!atual) return { ok: false, motivo: 'Não há pedido em montagem nesta conversa.' };
+  if (atual.itens.length === 0) {
+    return { ok: false, motivo: 'O pedido está vazio: escolha os itens antes de aplicar desconto.' };
+  }
+
+  const desconto = acharDesconto(ctx.catalogo, chave);
+  if (!desconto) {
+    const cadastrados = chavesDeDesconto(ctx.catalogo);
+    return {
+      ok: false,
+      motivo:
+        cadastrados.length === 0
+          ? 'Não existe nenhum desconto cadastrado. NÃO prometa desconto: avise a responsável ' +
+            'com `avisar_responsavel`.'
+          : `"${chave}" não é um desconto cadastrado. Os únicos que existem são: ` +
+            `${cadastrados.join(', ')}. Para qualquer outro, NÃO prometa nada e avise a ` +
+            `responsável com \`avisar_responsavel\`.`,
+    };
+  }
+
+  const faltaMencao = exigeMencaoNaoAtendida(ctx, desconto);
+  if (faltaMencao) return { ok: false, motivo: faltaMencao };
+
+  if (desconto.apenasPrimeiraCompra === true && jaComprou(ctx)) {
+    return {
+      ok: false,
+      motivo:
+        `${desconto.nome} vale só na primeira compra, e este cliente já tem pedido fechado ` +
+        `antes. NÃO aplique e NÃO ofereça.`,
+    };
+  }
+
+  ctx.db
+    .prepare(
+      `UPDATE orders SET discount_key = ?, discount_cents = ?, updated_at = datetime('now')
+       WHERE id = ? AND status = 'rascunho'`,
+    )
+    .run(desconto.chave, desconto.valorCentavos, atual.id);
+
+  const pedido = comTaxa(ctx.db, atual.id, ctx.catalogo);
+  return pedido ? { ok: true, valor: pedido } : { ok: false, motivo: 'Não consegui ler o pedido.' };
+}
+
+/** A recusa por falta de menção, ou `undefined` quando a condição está cumprida. */
+function exigeMencaoNaoAtendida(ctx: ContextoDoPedido, desconto: Desconto): string | undefined {
+  const palavras = desconto.exigeMencaoDoCliente ?? [];
+  if (palavras.length === 0) return undefined;
+
+  const ditoPeloCliente = (
+    ctx.db
+      .prepare(`SELECT content FROM messages WHERE conversation_id = ? AND role = 'user'`)
+      .all(ctx.conversaId) as { content: string }[]
+  )
+    .map((m) => m.content.toLowerCase())
+    .join(' \n ');
+
+  if (palavras.some((palavra) => ditoPeloCliente.includes(palavra.toLowerCase()))) return undefined;
+
+  return (
+    `${desconto.nome} só vale se o CLIENTE mencionar. Ele não falou nada disso nesta conversa, ` +
+    `então o desconto NÃO se aplica — e você também não pode contar que ele existe nem ` +
+    `perguntar se a pessoa tem, porque isso ensina quem não tem a dizer que tem.`
+  );
+}
+
+/** Este contato já fechou pedido antes? */
+function jaComprou(ctx: ContextoDoPedido): boolean {
+  const linha = ctx.db
+    .prepare(
+      `SELECT COUNT(*) AS n FROM orders
+       WHERE tenant_id = ? AND contact_id = ? AND status = 'confirmado'`,
+    )
+    .get(ctx.tenantId, ctx.contatoId) as { n: number };
+
+  return linha.n > 0;
+}
+
 /** O que ainda falta para o pedido poder ser fechado. */
 export function faltaParaFechar(pedido: Pedido): string[] {
   const faltando: string[] = [];
@@ -444,7 +574,11 @@ export function resumirPedido(pedido: Pedido): string {
       ? 'entrega grátis'
       : `entrega ${emReais(pedido.taxaCentavos)}`;
 
-  return `${itens}; ${entrega}; TOTAL ${emReais(pedido.totalCentavos)}`;
+  const desconto = pedido.desconto
+    ? `; desconto de ${emReais(pedido.desconto.valorCentavos)} (${pedido.desconto.nome})`
+    : '';
+
+  return `${itens}; ${entrega}${desconto}; TOTAL ${emReais(pedido.totalCentavos)}`;
 }
 
 function formatarQuantidade(quantidade: number, unidade: string): string {

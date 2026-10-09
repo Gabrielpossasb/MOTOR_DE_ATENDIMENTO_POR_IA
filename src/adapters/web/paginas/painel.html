@@ -372,6 +372,13 @@
                     reais(o.totalCentavos) +
                     '</strong>' +
                     (o.taxaCentavos > 0 ? '<br /><span class="rodape">entrega inclusa</span>' : '') +
+                    (o.desconto
+                      ? '<br /><span class="rodape">menos ' +
+                        reais(o.desconto.valorCentavos) +
+                        ' (' +
+                        escapar(o.desconto.nome) +
+                        ')</span>'
+                      : '') +
                     '</td><td><span class="etiqueta handoff">a confirmar</span><br />' +
                     escapar(o.dados.horarioDesejado || '-') +
                     '</td><td>' +

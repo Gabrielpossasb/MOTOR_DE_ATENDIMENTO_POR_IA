@@ -44,7 +44,7 @@ export function dividirEmChunks(texto: string, opcoes: OpcoesDeChunking = {}): C
     throw new Error('A sobreposição precisa ser menor que o tamanho alvo do chunk.');
   }
 
-  const normalizado = texto.replace(/\r\n/g, '\n').trim();
+  const normalizado = semComentarios(texto.replace(/\r\n/g, '\n')).trim();
   if (normalizado.length === 0) return [];
 
   const chunks: ChunkCru[] = [];
@@ -72,6 +72,30 @@ export function dividirEmChunks(texto: string, opcoes: OpcoesDeChunking = {}): C
   }
 
   return chunks;
+}
+
+/**
+ * Tira os comentários de markdown (`<!-- ... -->`) antes de qualquer coisa.
+ *
+ * Comentário é anotação para quem EDITA o documento: ele não aparece no
+ * markdown renderizado, então nem a pessoa que lê o arquivo o vê. Deixá-lo
+ * virar chunk é transformar recado interno em conhecimento do negócio — e isso
+ * já quase aconteceu: um marcador `<!-- MUDA DE ESTADO: troque o parágrafo
+ * acima e rode npm run ingest -->` foi indexado junto das formas de pagamento,
+ * e o bot poderia muito bem responder sobre `npm run ingest` a um cliente
+ * perguntando se aceita cartão.
+ *
+ * É o mesmo motivo do prefixo `_` nos nomes de arquivo, um nível abaixo: ali o
+ * arquivo inteiro fica fora, aqui um trecho dele.
+ *
+ * Com isso o comentário passa a ser o jeito OFICIAL de anotar documento de
+ * cliente — nota de manutenção que o bot nunca lê.
+ */
+function semComentarios(texto: string): string {
+  // `[\s\S]` em vez de `.` porque comentário de markdown ocupa várias linhas, e
+  // não-guloso para dois comentários seguidos não virarem um só, engolindo o
+  // conteúdo entre eles.
+  return texto.replace(/<!--[\s\S]*?-->/g, '');
 }
 
 /**

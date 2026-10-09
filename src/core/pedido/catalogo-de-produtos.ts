@@ -42,11 +42,46 @@ export interface TaxaDeEntrega {
   taxaCentavos: number;
 }
 
+/**
+ * Um desconto que o bot PODE aplicar.
+ *
+ * Decisão do dono: "são apenas descontos que estiverem cadastrados". O bot não
+ * consegue inventar um porque só existem os que estão aqui, e a ferramenta
+ * recusa qualquer chave fora da lista — a mesma forma do `confirmado: boolean`
+ * e do índice único de vaga.
+ *
+ * Desconto SEM valor fixo não entra aqui. O de acima de 10 quilos é combinado
+ * caso a caso com a responsável, então ele continua sendo alerta, não cálculo:
+ * é essa a diferença entre "o bot aplica" e "o bot avisa".
+ */
+export interface Desconto {
+  chave: string;
+  /** Como o cliente vai ler. */
+  nome: string;
+  valorCentavos: number;
+  /**
+   * O cliente precisa ter dito uma destas palavras em alguma mensagem da
+   * conversa.
+   *
+   * Vazio ou ausente = sem essa exigência. Existe porque a condição "só para
+   * quem recebeu o cartão" vazava quando era regra de prompt: o bot explicava a
+   * condição e perguntava *"você recebeu esse cartão?"*, ensinando quem não tem
+   * a dizer que tem. Como contrato, o desconto não sai sem a menção.
+   */
+  exigeMencaoDoCliente?: string[];
+  /** Recusa se este contato já tem pedido confirmado. */
+  apenasPrimeiraCompra?: boolean;
+  /** A condição em português, para o bot explicar ao cliente. */
+  condicao?: string;
+}
+
 export interface CatalogoDeProdutos {
   produtos: Produto[];
   taxaDeEntrega: TaxaDeEntrega;
   /** Termo -> produtos que ele nomeia, quando é mais de um com preços diferentes. */
   ambiguos: Record<string, string[]>;
+  /** Os únicos descontos que o bot pode aplicar. Vazio = nenhum. */
+  descontos: Desconto[];
 }
 
 /** O que a resolução de um termo pode devolver. */
@@ -60,6 +95,7 @@ interface ArquivoDeProdutos {
   taxaDeEntrega?: TaxaDeEntrega;
   produtos?: Produto[];
   ambiguos?: Record<string, unknown>;
+  descontos?: Desconto[];
 }
 
 /**
@@ -119,7 +155,13 @@ export function carregarCatalogoDeProdutos(slug: string): CatalogoDeProdutos {
     ambiguos[chaveDeBusca(termo)] = chaves as string[];
   }
 
-  cache = { produtos, taxaDeEntrega: dados.taxaDeEntrega, ambiguos };
+  // Entrada sem `chave` e comentario para quem edita o arquivo: JSON nao tem
+  // comentario, e a convencao de prefixar com `_` ja e usada no resto do projeto.
+  const descontos = (dados.descontos ?? []).filter(
+    (d) => typeof d.chave === 'string' && d.chave.length > 0 && Number.isFinite(d.valorCentavos),
+  );
+
+  cache = { produtos, taxaDeEntrega: dados.taxaDeEntrega, ambiguos, descontos };
   cacheSlug = slug;
   return cache;
 }
@@ -162,6 +204,25 @@ export function resolverProduto(catalogo: CatalogoDeProdutos, termo: string): Re
 /** Os nomes do catálogo, para a recusa dizer o que existe. */
 export function nomesDoCatalogo(catalogo: CatalogoDeProdutos): string[] {
   return catalogo.produtos.map((p) => p.nome);
+}
+
+/**
+ * Acha um desconto cadastrado pela chave.
+ *
+ * Casamento exato, e `undefined` para qualquer coisa fora da lista: e isto que
+ * torna desconto inventado impossivel, em vez de improvavel.
+ */
+export function acharDesconto(
+  catalogo: CatalogoDeProdutos,
+  chave: string,
+): Desconto | undefined {
+  const buscada = normalizar(chave);
+  return catalogo.descontos.find((d) => normalizar(d.chave) === buscada);
+}
+
+/** As chaves cadastradas, para a assinatura da ferramenta e para a recusa. */
+export function chavesDeDesconto(catalogo: CatalogoDeProdutos): string[] {
+  return catalogo.descontos.map((d) => d.chave);
 }
 
 export function emReais(centavos: number): string {

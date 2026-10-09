@@ -227,5 +227,28 @@
       "polpa-acai",
       "acai-balde"
     ]
-  }
+  },
+  "descontos": [
+    {
+      "_leia": "Descontos CADASTRADOS: os unicos que o bot pode aplicar. Chave fora desta lista e recusada pela ferramenta. Desconto sem valor fixo (o de acima de 10 kg, combinado caso a caso) NAO entra aqui de proposito: aquele o bot avisa o dono, nao aplica."
+    },
+    {
+      "chave": "cartao-primeira-compra",
+      "nome": "desconto do cartao impresso",
+      "valorCentavos": 1000,
+      "_valor": "R$ 10,00. Copiado para o pedido no momento em que e aplicado, entao mudar aqui nao reescreve pedido ja fechado.",
+      "exigeMencaoDoCliente": [
+        "cartao",
+        "cartão",
+        "panfleto",
+        "folheto",
+        "flyer",
+        "cartaozinho"
+      ],
+      "_exigeMencaoDoCliente": "O cliente TEM de ter falado uma destas palavras em alguma mensagem desta conversa. A ferramenta confere no historico; nao e regra de prompt. Foi o que impediu o vazamento medido: o bot explicava a condicao e perguntava 'voce recebeu esse cartao?', ensinando quem nao tem a dizer que tem.",
+      "apenasPrimeiraCompra": true,
+      "_apenasPrimeiraCompra": "A ferramenta recusa se este contato ja tem pedido confirmado. No WhatsApp o contato e o telefone e isso funciona; nesta fase local o id e aleatorio por sessao, entao a checagem quase nunca dispara.",
+      "condicao": "So para quem recebeu o cartao ou panfleto impresso, e so na primeira compra."
+    }
+  ]
 }

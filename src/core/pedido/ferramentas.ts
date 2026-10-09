@@ -31,6 +31,7 @@ import { normalizar } from '../texto.js';
 import {
   adicionarItem,
   anotarDados,
+  aplicarDesconto,
   comTaxa,
   faltaParaFechar,
   fecharPedido,
@@ -106,6 +107,26 @@ export const FERRAMENTAS_DO_PEDIDO: Ferramenta[] = [
         },
         forma_de_pagamento: { type: 'string', description: 'Pix, dinheiro ou cartão.' },
       },
+      additionalProperties: false,
+    },
+  },
+  {
+    nome: 'aplicar_desconto',
+    descricao:
+      'Aplica ao pedido um desconto CADASTRADO. Só existem os descontos da lista; qualquer ' +
+      'outro pedido de desconto NÃO se aplica — nesse caso você não promete nada e chama ' +
+      '`avisar_responsavel`. A ferramenta também confere a condição do desconto e recusa se ' +
+      'ela não estiver cumprida.',
+    parametros: {
+      type: 'object',
+      properties: {
+        desconto: {
+          type: 'string',
+          description:
+            'A chave do desconto cadastrado. Chame `ver_pedido` se não souber quais existem.',
+        },
+      },
+      required: ['desconto'],
       additionalProperties: false,
     },
   },
@@ -267,9 +288,21 @@ export function executarFerramentaDoPedido(
       }
 
       const pedido = comTaxa(ctx.db, atual.id, catalogo);
-      return pedido
-        ? respostaDoPedido(pedido, 'conferindo')
-        : JSON.stringify({ ok: false, erro: 'pedido ilegível' });
+      if (!pedido) return JSON.stringify({ ok: false, erro: 'pedido ilegível' });
+
+      // Os descontos cadastrados vão junto: e assim que o modelo descobre as
+      // chaves que `aplicar_desconto` aceita, sem precisar adivinhar.
+      const comDescontos = {
+        ...JSON.parse(respostaDoPedido(pedido, 'conferindo')),
+        descontos_cadastrados: catalogo.descontos.map((d) => ({
+          chave: d.chave,
+          nome: d.nome,
+          valor: emReais(d.valorCentavos),
+          condicao: d.condicao ?? '',
+        })),
+      };
+
+      return JSON.stringify(comDescontos);
     }
 
     case 'adicionar_ao_pedido': {
@@ -327,6 +360,13 @@ export function executarFerramentaDoPedido(
       // aí pedir o que ainda falta é a coisa certa.
       return r.ok
         ? respostaDoPedido(r.valor, 'fechando')
+        : JSON.stringify({ ok: false, erro: r.motivo });
+    }
+
+    case 'aplicar_desconto': {
+      const r = aplicarDesconto(contexto, texto(argumentos.desconto));
+      return r.ok
+        ? respostaDoPedido(r.valor, 'conferindo')
         : JSON.stringify({ ok: false, erro: r.motivo });
     }
 
@@ -412,6 +452,15 @@ function respostaDoPedido(pedido: Pedido, momento: Momento): string {
     taxa_de_entrega: pedido.taxaIndefinida
       ? 'a confirmar com a responsável'
       : emReais(pedido.taxaCentavos),
+    ...(pedido.desconto
+      ? {
+          desconto_aplicado: {
+            chave: pedido.desconto.chave,
+            nome: pedido.desconto.nome,
+            valor: emReais(pedido.desconto.valorCentavos),
+          },
+        }
+      : {}),
     total: emReais(pedido.totalCentavos),
     ja_anotado: pedido.dados,
   };
