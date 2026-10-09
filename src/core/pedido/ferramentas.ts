@@ -32,6 +32,7 @@ import {
   adicionarItem,
   anotarDados,
   aplicarDesconto,
+  tudoQueOClienteDisse,
   comTaxa,
   faltaParaFechar,
   fecharPedido,
@@ -236,15 +237,80 @@ function contemTermo(mensagem: string, termo: string): boolean {
 }
 
 export function unidadeIncompativel(produto: Produto, mensagemDoCliente: string): boolean {
-  if (!produto.unidade.startsWith('kg')) return false;
-
   const contaEmPacotes =
     /\d+\s*(pacote|pacotes|unidade|unidades|sach[êe]|sach[êe]s|saquinho|saquinhos|polpa|polpas|pote|potes)\b/i.test(
       mensagemDoCliente,
     );
-  const mencionaQuilo = /\d+\s*(kg|quilo|quilos|kilo|kilos|k\b)/i.test(mensagemDoCliente);
+  const mencionaQuilo = /\d+\s*(kg|quilo|quilos|kilo|kilos)\b/i.test(mensagemDoCliente);
 
-  return contaEmPacotes && !mencionaQuilo;
+  // Vendido por quilo e o cliente contou em pacotes: o caso dos "5 pacotes".
+  if (produto.unidade.startsWith('kg')) return contaEmPacotes && !mencionaQuilo;
+
+  // E o inverso, que custou uma venda inteira: o cliente disse "2 kg de açaí" e
+  // o modelo pôs 1 BALDE de 2 litros no pedido — produto diferente, preço
+  // diferente, quantidade diferente. Quem pede em quilo não está pedindo balde.
+  return mencionaQuilo;
+}
+
+/**
+ * O cliente escolheu entre dois produtos de nome ambíguo?
+ *
+ * A recusa por ambiguidade já existia e funcionou: "2 kg de açaí" fez o bot
+ * perguntar *"você quer a polpa ou o balde pronto?"*. Só que o cliente
+ * respondeu *"so isso"* — querendo dizer "é tudo que vou pedir" — e o modelo
+ * leu como resposta à própria pergunta, escolhendo o balde. Pedido virou 1
+ * balde de R$ 43,00 onde o cliente tinha pedido 2 kg de polpa, R$ 70,00.
+ *
+ * Perguntar não basta se o modelo pode responder no lugar do cliente. Então o
+ * que vale é o CLIENTE ter escrito algo que distingue: "polpa", "balde",
+ * "pronto". Enquanto ele não escrever, a ferramenta recusa.
+ */
+export function escolhaAmbiguaNaoResolvida(
+  catalogo: CatalogoDeProdutos,
+  produto: Produto,
+  ditoPeloCliente: string,
+): Produto[] | undefined {
+  const familia = Object.values(catalogo.ambiguos).find((chaves) => chaves.includes(produto.chave));
+  if (!familia || familia.length < 2) return undefined;
+
+  const opcoes = catalogo.produtos.filter((p) => familia.includes(p.chave));
+
+  // O que distingue são as PALAVRAS exclusivas deste produto dentro da família,
+  // não os termos inteiros. A primeira versão comparava termos completos e
+  // travou uma conversa: o cliente respondeu `"a polpa"` e isso não casava com
+  // "polpa de açaí", então a ferramenta recusou para sempre e o pedido nunca
+  // saiu. Ninguém repete o nome do catálogo ao responder uma escolha de dois.
+  const palavrasDosOutros = new Set(
+    opcoes
+      .filter((p) => p.chave !== produto.chave)
+      .flatMap((p) => palavrasDe([p.nome, ...p.termos])),
+  );
+
+  const distintivas = palavrasDe([produto.nome, ...produto.termos]).filter(
+    (palavra) => !palavrasDosOutros.has(palavra),
+  );
+
+  const clienteDistinguiu = distintivas.some((palavra) => contemTermo(ditoPeloCliente, palavra));
+  return clienteDistinguiu ? undefined : opcoes;
+}
+
+/**
+ * As palavras com carga semântica de uma lista de termos.
+ *
+ * Corta o que é curto ou numérico — "de", "em", "2" — porque isso aparece em
+ * qualquer lado da escolha e não distingue nada. Sobra o que o cliente de fato
+ * usa para escolher: "polpa", "balde", "pronto", "litros".
+ */
+function palavrasDe(termos: string[]): string[] {
+  const palavras = new Set<string>();
+
+  for (const termo of termos) {
+    for (const palavra of normalizar(termo).split(/[^a-z0-9]+/)) {
+      if (palavra.length >= 4 && !/^\d+$/.test(palavra)) palavras.add(palavra);
+    }
+  }
+
+  return [...palavras];
 }
 
 /** Executa uma ferramenta de pedido. Nunca lança: erro vira texto para o modelo. */
@@ -272,6 +338,7 @@ export function executarFerramentaDoPedido(
     conversaId: ctx.conversaId,
     contatoId: ctx.contatoId,
     catalogo,
+    ...(ctx.mensagemDoCliente !== undefined ? { mensagemAtual: ctx.mensagemDoCliente } : {}),
   };
 
   switch (nome) {
@@ -313,9 +380,34 @@ export function executarFerramentaDoPedido(
         return JSON.stringify({ ok: false, erro: 'produto é obrigatório.' });
       }
 
+      const resolvido = resolverProduto(catalogo, produto);
+
+      // A escolha entre dois produtos de nome ambiguo tem de ter sido feita
+      // pelo CLIENTE. Perguntar nao basta se o modelo pode responder no lugar
+      // dele -- foi assim que "2 kg de acai" virou "1 balde de acai pronto".
+      if (resolvido.tipo === 'achado') {
+        const opcoes = escolhaAmbiguaNaoResolvida(
+          catalogo,
+          resolvido.produto,
+          tudoQueOClienteDisse(contexto),
+        );
+
+        if (opcoes) {
+          const lista = opcoes
+            .map((p) => `${p.nome} (${emReais(p.precoCentavos)} o ${p.unidade})`)
+            .join(' ou ');
+          return JSON.stringify({
+            ok: false,
+            erro:
+              `O CLIENTE ainda não disse qual dos dois quer: ${lista}. ` +
+              `Pergunte e ESPERE a resposta dele — não escolha por ele, os preços são ` +
+              `diferentes. Se ele já respondeu outra coisa no meio, pergunte de novo.`,
+          });
+        }
+      }
+
       // A unidade e conferida ANTES de somar, porque somar errado aqui e o erro
       // mais caro que este negocio comete.
-      const resolvido = resolverProduto(catalogo, produto);
       if (
         resolvido.tipo === 'achado' &&
         ctx.mensagemDoCliente !== undefined &&
@@ -323,11 +415,14 @@ export function executarFerramentaDoPedido(
       ) {
         return JSON.stringify({
           ok: false,
-          erro:
-            `O cliente contou em pacotes, mas ${resolvido.produto.nome} é vendida por QUILO ` +
-            `fechado — 1 kg tem 10 pacotes de 100 g, e não vendemos pacote avulso. ` +
-            `NÃO suponha a quantidade: explique isso e PERGUNTE quantos quilos ele quer. ` +
-            `Cuidado, a diferença é grande: 5 pacotes são meio quilo, 5 quilos são 50 pacotes.`,
+          erro: resolvido.produto.unidade.startsWith('kg')
+            ? `O cliente contou em pacotes, mas ${resolvido.produto.nome} é vendida por QUILO ` +
+              `fechado — 1 kg tem 10 pacotes de 100 g, e não vendemos pacote avulso. ` +
+              `NÃO suponha a quantidade: explique isso e PERGUNTE quantos quilos ele quer. ` +
+              `Cuidado, a diferença é grande: 5 pacotes são meio quilo, 5 quilos são 50 pacotes.`
+            : `O cliente pediu em QUILO, e ${resolvido.produto.nome} não é vendido por quilo: ` +
+              `sai por ${resolvido.produto.unidade}. Não troque a unidade por conta própria — ` +
+              `confirme com ele o que ele quer antes de somar.`,
         });
       }
 

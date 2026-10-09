@@ -30,6 +30,7 @@ import {
   anotarDados,
   aplicarDesconto,
   comTaxa,
+  descontoAplicavel,
   faltaParaFechar,
   fecharPedido,
   rascunhoDaConversa,
@@ -721,6 +722,152 @@ describe('desconto só sai se estiver cadastrado', () => {
     const r = JSON.parse(cru);
     expect(r.ok).toBe(false);
     expect(String(r.erro)).toContain('avisar_responsavel');
+  });
+});
+
+describe('a escolha ambígua é do CLIENTE, não do modelo', () => {
+  // Medido numa conversa real: "2 kg de acai" fez o bot perguntar "você quer a
+  // polpa ou o balde pronto?" — a recusa de ambiguidade funcionou. Só que o
+  // cliente respondeu "so isso", querendo dizer "é tudo que vou pedir", e o
+  // modelo leu como resposta à própria pergunta e escolheu o balde. O pedido
+  // virou 1 balde de R$ 43,00 onde o cliente pediu 2 kg de polpa, R$ 70,00.
+  //
+  // Perguntar não basta se o modelo pode responder no lugar do cliente.
+  function chamar(argumentos: Record<string, unknown>, mensagem: string): Record<string, unknown> {
+    return JSON.parse(
+      executarFerramentaDoPedido(
+        {
+          db,
+          tenantId,
+          tenantSlug: SLUG,
+          contatoId: 'contato-1',
+          conversaId,
+          semPersistir: false,
+          mensagemDoCliente: mensagem,
+        },
+        'adicionar_ao_pedido',
+        argumentos,
+      ),
+    );
+  }
+
+  function clienteDisse(texto: string): void {
+    gravarMensagem(db, { conversaId, papel: 'user', conteudo: texto });
+  }
+
+  it('RECUSA o balde quando o cliente só falou "acai"', () => {
+    clienteDisse('2 kg de acai');
+    clienteDisse('so isso');
+
+    const r = chamar({ produto: 'açaí pronto', quantidade: 1 }, 'so isso');
+
+    expect(r.ok).toBe(false);
+    expect(String(r.erro)).toContain('ainda não disse qual dos dois');
+    expect(String(r.erro)).toContain('ESPERE a resposta dele');
+    expect(rascunhoDaConversa(db, conversaId)).toBeUndefined();
+  });
+
+  it('RECUSA a polpa também: a dúvida não escolhe lado', () => {
+    clienteDisse('quero acai');
+
+    expect(chamar({ produto: 'polpa de açaí', quantidade: 2 }, 'quero acai').ok).toBe(false);
+  });
+
+  it('ACEITA quando o cliente responde só "a polpa"', () => {
+    // Travou uma conversa real: a primeira versao comparava o TERMO inteiro, e
+    // "a polpa" nao casava com "polpa de acai". A ferramenta recusou para
+    // sempre e o pedido nunca saiu -- pior que o erro que ela veio corrigir.
+    // Ninguem repete o nome do catalogo ao responder uma escolha de dois.
+    clienteDisse('2 kg de acai');
+    clienteDisse('a polpa');
+
+    const r = chamar({ produto: 'polpa de açaí', quantidade: 2 }, 'a polpa');
+    expect(r.ok).toBe(true);
+    expect(r.total).toBe('R$ 70,00');
+  });
+
+  it('a resposta do turno ATUAL vale, mesmo sem estar no banco', () => {
+    // O bug que travou a conversa duas vezes. O motor grava as mensagens DEPOIS
+    // de gerar a resposta, então durante a chamada de ferramenta o banco ainda
+    // não tem o que o cliente acabou de dizer. A checagem lia só o banco, não
+    // via o "a polpa", e repetia a mesma pergunta até o fim da conversa.
+    //
+    // Aqui "a polpa" chega SÓ como mensagem do turno, nunca gravada: é essa a
+    // diferença entre este teste e o anterior.
+    clienteDisse('2 kg de acai');
+
+    const r = chamar({ produto: 'polpa de açaí', quantidade: 2 }, 'a polpa');
+    expect(r.ok).toBe(true);
+    expect(r.total).toBe('R$ 70,00');
+  });
+
+  it('ACEITA depois de o cliente dizer "balde"', () => {
+    clienteDisse('quero acai');
+    clienteDisse('o balde pronto');
+
+    const r = chamar({ produto: 'açaí pronto', quantidade: 1 }, 'o balde pronto');
+    expect(r.ok).toBe(true);
+    // O balde é vendido por volume, então o peso é desconhecido e a taxa fica a
+    // confirmar em vez de ser chutada — o total é só o do item.
+    expect(r.total).toBe('R$ 43,00');
+    expect(r.taxa_de_entrega).toBe('a confirmar com a responsável');
+  });
+
+  it('ACEITA depois de o cliente dizer "polpa"', () => {
+    clienteDisse('quero 2 kg de polpa de acai');
+
+    const r = chamar({ produto: 'polpa de açaí', quantidade: 2 }, 'quero 2 kg de polpa de acai');
+    expect(r.ok).toBe(true);
+    expect(r.total).toBe('R$ 70,00');
+  });
+
+  it('produto sem ambiguidade não é afetado', () => {
+    clienteDisse('2 kg de goiaba');
+    expect(chamar({ produto: 'polpa de goiaba', quantidade: 2 }, '2 kg de goiaba').ok).toBe(true);
+  });
+
+  it('quem pede em QUILO não está pedindo balde', () => {
+    // O outro lado do mesmo erro: a unidade conferia só o sentido
+    // pacote-virou-quilo. "2 kg de açaí" com um produto vendido em balde é
+    // troca de produto disfarçada de quantidade.
+    const balde = catalogo.produtos.find((p) => p.chave === 'acai-balde');
+    expect(balde && unidadeIncompativel(balde, 'quero 2 kg de acai')).toBe(true);
+    expect(balde && unidadeIncompativel(balde, 'quero 1 balde de acai')).toBe(false);
+  });
+});
+
+describe('a rede que lembra o desconto', () => {
+  // Medido: o cliente abriu com "recebi o cartão de vocês na feira", montou o
+  // pedido, e no fim perguntou "tenho desconto com o cartão?". O bot respondeu
+  // "vou confirmar isso pra você" e NUNCA chamou a ferramenta — o desconto a
+  // que ele tinha direito não saiu. É a mesma forma da rede de unidade, mas
+  // POSITIVA: manda fazer algo que o cliente tem direito.
+  it('avisa quando o cliente já tem direito e o desconto não foi aplicado', () => {
+    gravarMensagem(db, { conversaId, papel: 'user', conteudo: 'recebi o cartao na feira' });
+    adicionarItem(ctx, 'polpa de goiaba', 2);
+
+    const d = descontoAplicavel(ctx);
+    expect(d?.chave).toBe('cartao-primeira-compra');
+  });
+
+  it('fica calada depois de aplicado', () => {
+    gravarMensagem(db, { conversaId, papel: 'user', conteudo: 'recebi o cartao' });
+    adicionarItem(ctx, 'polpa de goiaba', 2);
+    aplicarDesconto(ctx, 'cartao-primeira-compra');
+
+    expect(descontoAplicavel(ctx)).toBeUndefined();
+  });
+
+  it('fica calada quando o cliente não mencionou', () => {
+    gravarMensagem(db, { conversaId, papel: 'user', conteudo: 'e minha primeira compra' });
+    adicionarItem(ctx, 'polpa de goiaba', 2);
+
+    expect(descontoAplicavel(ctx)).toBeUndefined();
+  });
+
+  it('fica calada com o pedido vazio', () => {
+    gravarMensagem(db, { conversaId, papel: 'user', conteudo: 'recebi o cartao' });
+    expect(descontoAplicavel(ctx)).toBeUndefined();
   });
 });
 

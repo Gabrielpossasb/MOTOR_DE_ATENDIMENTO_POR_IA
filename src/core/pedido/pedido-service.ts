@@ -126,7 +126,13 @@ export function pedidoPorId(db: Db, pedidoId: number): Pedido | undefined {
  * Pedidos já confirmados de um tenant, do mais novo para o mais velho.
  * Alimenta o painel — é o que a dona do negócio precisa separar e entregar.
  */
-export function pedidosConfirmados(db: Db, tenantId: number, limite = 20): Pedido[] {
+export function pedidosConfirmados(
+  db: Db,
+  tenantId: number,
+  limite = 20,
+  /** Para trocar a chave do desconto pelo nome que uma pessoa lê no painel. */
+  catalogo?: CatalogoDeProdutos,
+): Pedido[] {
   const linhas = db
     .prepare(
       `SELECT id, status, customer_name, address, preferred_time, payment_method,
@@ -136,7 +142,16 @@ export function pedidosConfirmados(db: Db, tenantId: number, limite = 20): Pedid
     )
     .all(tenantId, limite) as LinhaDePedido[];
 
-  return linhas.map((l) => montar(db, l));
+  return linhas.map((l) => {
+    const pedido = montar(db, l);
+
+    if (pedido.desconto && catalogo) {
+      const cadastrado = acharDesconto(catalogo, pedido.desconto.chave);
+      if (cadastrado) pedido.desconto.nome = cadastrado.nome;
+    }
+
+    return pedido;
+  });
 }
 
 function montar(db: Db, linha: LinhaDePedido, taxa?: CatalogoDeProdutos['taxaDeEntrega']): Pedido {
@@ -267,6 +282,17 @@ export interface ContextoDoPedido {
   conversaId: number;
   contatoId: string;
   catalogo: CatalogoDeProdutos;
+  /**
+   * A mensagem que o cliente mandou NESTE turno.
+   *
+   * Precisa vir por parâmetro porque ela ainda não está em `messages`: o motor
+   * grava a conversa depois de gerar a resposta, então durante a chamada de
+   * ferramenta o banco não a tem. Sem isto, tudo que depende do que o cliente
+   * acabou de dizer fica cego — e o custo foi uma conversa travada: o cliente
+   * respondeu `"a polpa"` à escolha entre polpa e balde, a checagem não viu a
+   * resposta, e o bot repetiu a mesma pergunta até o fim.
+   */
+  mensagemAtual?: string;
 }
 
 /**
@@ -471,18 +497,39 @@ export function aplicarDesconto(ctx: ContextoDoPedido, chave: string): Resultado
   return pedido ? { ok: true, valor: pedido } : { ok: false, motivo: 'Não consegui ler o pedido.' };
 }
 
+/** O histórico do cliente MAIS a mensagem deste turno, que ainda não foi gravada. */
+export function tudoQueOClienteDisse(ctx: ContextoDoPedido): string {
+  const historico = ditoPeloClienteNaConversa(ctx.db, ctx.conversaId);
+  const atual = (ctx.mensagemAtual ?? '').toLowerCase();
+  return atual.length > 0 ? `${historico} 
+ ${atual}` : historico;
+}
+
 /** A recusa por falta de menção, ou `undefined` quando a condição está cumprida. */
+/**
+ * Tudo que o CLIENTE escreveu nesta conversa, em minúsculas.
+ *
+ * Três coisas dependem disto, e todas são contrato e não prompt: a menção que
+ * libera um desconto, a escolha entre dois produtos de nome ambíguo, e a
+ * unidade em que ele contou. Em todas vale o que ELE disse, não o que o modelo
+ * deduziu — porque foi exatamente deduzindo que o bot trocou "2 kg de açaí" por
+ * "1 balde de açaí pronto".
+ */
+export function ditoPeloClienteNaConversa(db: Db, conversaId: number): string {
+  return (
+    db
+      .prepare(`SELECT content FROM messages WHERE conversation_id = ? AND role = 'user'`)
+      .all(conversaId) as { content: string }[]
+  )
+    .map((m) => m.content.toLowerCase())
+    .join(' \n ');
+}
+
 function exigeMencaoNaoAtendida(ctx: ContextoDoPedido, desconto: Desconto): string | undefined {
   const palavras = desconto.exigeMencaoDoCliente ?? [];
   if (palavras.length === 0) return undefined;
 
-  const ditoPeloCliente = (
-    ctx.db
-      .prepare(`SELECT content FROM messages WHERE conversation_id = ? AND role = 'user'`)
-      .all(ctx.conversaId) as { content: string }[]
-  )
-    .map((m) => m.content.toLowerCase())
-    .join(' \n ');
+  const ditoPeloCliente = tudoQueOClienteDisse(ctx);
 
   if (palavras.some((palavra) => ditoPeloCliente.includes(palavra.toLowerCase()))) return undefined;
 
@@ -490,6 +537,32 @@ function exigeMencaoNaoAtendida(ctx: ContextoDoPedido, desconto: Desconto): stri
     `${desconto.nome} só vale se o CLIENTE mencionar. Ele não falou nada disso nesta conversa, ` +
     `então o desconto NÃO se aplica — e você também não pode contar que ele existe nem ` +
     `perguntar se a pessoa tem, porque isso ensina quem não tem a dizer que tem.`
+  );
+}
+
+/**
+ * Um desconto cadastrado cujas condições JÁ estão cumpridas e que ainda não foi
+ * aplicado.
+ *
+ * Existe para o modelo não deixar dinheiro do cliente na mesa por esquecimento.
+ * Medido: o cliente abriu a conversa com *"recebi o cartão de vocês na feira"*,
+ * montou o pedido, e no fim perguntou *"tenho desconto com o cartão?"*. O bot
+ * respondeu *"vou confirmar isso pra você"* e NUNCA chamou `aplicar_desconto` —
+ * o desconto a que ele tinha direito simplesmente não saiu.
+ *
+ * É a mesma forma da rede de unidade e da rede de palavra-chave dos alertas: o
+ * modelo esquece de chamar a ferramenta, então o código avisa que é hora. A
+ * diferença é que esta rede é POSITIVA — manda fazer algo que o cliente tem
+ * direito, em vez de impedir algo errado.
+ */
+export function descontoAplicavel(ctx: ContextoDoPedido): Desconto | undefined {
+  const atual = rascunhoDaConversa(ctx.db, ctx.conversaId);
+  if (!atual || atual.itens.length === 0 || atual.desconto) return undefined;
+
+  return ctx.catalogo.descontos.find(
+    (d) =>
+      exigeMencaoNaoAtendida(ctx, d) === undefined &&
+      !(d.apenasPrimeiraCompra === true && jaComprou(ctx)),
   );
 }
 

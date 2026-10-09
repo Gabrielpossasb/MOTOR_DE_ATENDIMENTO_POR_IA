@@ -146,8 +146,7 @@
     {
       "id": "desconto-atacado",
       "pergunta": "faz desconto se eu levar 20 kg?",
-      "comentario": "A politica EXISTE desde que a condicao acima de 10 kg foi documentada: diz que existe e que a responsavel fecha, sem estimar percentual. A expectativa anterior era handoff e ficou velha quando o alerta substituiu a desistencia.",
-      "esperaHandoff": false,
+      "comentario": "A politica EXISTE: diz que existe condicao acima de 10 kg e que a responsavel fecha, sem estimar percentual. SEM `esperaHandoff` de proposito -- o comportamento desenhado e chamar `avisar_responsavel`, e a avaliacao roda sem conversa, logo sem ferramenta nenhuma. Sem ela o modelo cai na frase de handoff, que e o certo quando nao ha como avisar. O que esta pergunta mede aqui e o CONTEUDO; o comportamento de alerta so se mede conversando.",
       "deveConter": [
         "10"
       ],
@@ -269,10 +268,13 @@
       "id": "desconto-cartao-impresso",
       "pergunta": "recebi o cartao de voces, tenho desconto na primeira compra?",
       "deveConter": [
-        "10"
+        "desconto"
       ],
-      "esperaHandoff": false,
-      "comentario": "R$ 10,00 na primeira compra, SO para quem tem o cartao impresso. Aqui o cliente mencionou, entao vale. O oposto esta em 'desconto-cartao-nao-mencionado'. Sem fonteEsperada: o fato saiu dos documentos e passou a viver so no prompt, porque trecho condicional recuperado pela busca vazava o desconto para quem nao tem cartao."
+      "comentario": "O cliente mencionou o cartao, entao o desconto vale. NAO exige mais o valor na resposta: quem aplica e informa o total e a ferramenta `aplicar_desconto`, e sem conversa ela nao existe. Citar R$ 10,00 de cabeca seria justamente o que o prompt proibe. O oposto -- nao vazar para quem nao mencionou -- esta em 'desconto-cartao-nao-mencionado'.",
+      "naoPodeConter": [
+        "R$ 10,00 de desconto no total",
+        "total ja com"
+      ]
     },
     {
       "id": "desconto-cartao-nao-mencionado",

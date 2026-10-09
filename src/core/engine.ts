@@ -17,9 +17,10 @@ import {
   avisoDeUnidade,
   executarFerramentaDoPedido,
 } from './pedido/ferramentas.js';
-import { carregarCatalogoDeProdutos } from './pedido/catalogo-de-produtos.js';
+import { carregarCatalogoDeProdutos, emReais } from './pedido/catalogo-de-produtos.js';
 import {
   comTaxa,
+  descontoAplicavel,
   faltaParaFechar,
   rascunhoDaConversa,
   resumirPedido,
@@ -358,7 +359,9 @@ export class Motor {
     // O pedido vai ao modelo como DADO, a cada mensagem, em vez de depender de
     // ele lembrar ou de chamar `ver_pedido`. Ver `pedidoAtualParaOPrompt`.
     const pedidoAtual =
-      comPedido && conversa ? this.pedidoParaOPrompt(tenant.slug, conversa.id) : undefined;
+      comPedido && conversa
+        ? this.pedidoParaOPrompt(tenant.slug, tenant.id, conversa.id, contatoId)
+        : undefined;
 
     // Rede determinística de unidade: "5 polpas" não pode virar 5 quilos. Roda
     // sobre o texto do cliente, antes de qualquer chamada paga, porque a regra
@@ -499,7 +502,12 @@ export class Motor {
    * de quem só perguntou um preço é ruído, e ainda sugere ao modelo que ele
    * deveria estar montando algo.
    */
-  private pedidoParaOPrompt(tenantSlug: string, conversaId: number): string | undefined {
+  private pedidoParaOPrompt(
+    tenantSlug: string,
+    tenantId: number,
+    conversaId: number,
+    contatoId: string,
+  ): string | undefined {
     const rascunho = rascunhoDaConversa(this.db, conversaId);
     if (!rascunho || rascunho.itens.length === 0) return undefined;
 
@@ -507,7 +515,27 @@ export class Motor {
     const pedido = comTaxa(this.db, rascunho.id, catalogo);
     if (!pedido) return undefined;
 
-    return pedidoAtualParaOPrompt(resumirPedido(pedido), faltaParaFechar(pedido));
+    // Rede POSITIVA: avisa que o cliente tem direito a um desconto cadastrado e
+    // que ele ainda nao foi aplicado. Ver `descontoAplicavel`.
+    const disponivel = descontoAplicavel({
+      db: this.db,
+      tenantId,
+      conversaId,
+      contatoId,
+      catalogo,
+    });
+
+    return pedidoAtualParaOPrompt(
+      resumirPedido(pedido),
+      faltaParaFechar(pedido),
+      disponivel
+        ? `O cliente TEM DIREITO ao ${disponivel.nome}, de ` +
+            `${emReais(disponivel.valorCentavos)}, e ele ainda NÃO foi aplicado. Chame ` +
+            `\`aplicar_desconto\` com a chave "${disponivel.chave}" ANTES de informar ` +
+            `qualquer total. Este desconto É CADASTRADO: não é caso de avisar a responsável ` +
+            `nem de dizer que vai confirmar — é caso de chamar a ferramenta agora.`
+        : undefined,
+    );
   }
 
   /**

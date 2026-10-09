@@ -17,6 +17,7 @@ import {
 import { listarLembretes, type Lembrete } from '../agenda/lembretes.js';
 import { listarAlertasPendentes, type Alerta } from '../alertas/alertas.js';
 import { pedidosConfirmados, type Pedido } from '../pedido/pedido-service.js';
+import { carregarCatalogoDeProdutos } from '../pedido/catalogo-de-produtos.js';
 
 export interface ResumoDeConversa {
   id: number;
@@ -133,7 +134,10 @@ export function montarPainel(db: Db, slug: string, limiteDeConversas = 50): Pain
     handoffsPendentes: listarHandoffsPendentes(db, tenant.id),
     alertasPendentes: listarAlertasPendentes(db, tenant.id),
     lembretesPendentes: listarLembretes(db, tenant.id, { limite: 50 }),
-    pedidosConfirmados: tenant.config.vende === true ? pedidosConfirmados(db, tenant.id) : [],
+    pedidosConfirmados:
+      tenant.config.vende === true
+        ? pedidosConfirmados(db, tenant.id, 20, carregarCatalogoDeProdutos(tenant.slug))
+        : [],
     mensagens: {
       total: mensagens.total,
       doBot,

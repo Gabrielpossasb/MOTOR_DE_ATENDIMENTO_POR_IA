@@ -119,8 +119,15 @@ export function regrasDeAviso(): string {
     'Você pode deixar um aviso para a pessoa responsável pelo negócio com a ferramenta ' +
       '`avisar_responsavel`. Ela NÃO interrompe o atendimento.',
     '',
-    'V1. Avise quando o cliente pedir desconto, abatimento ou preço de atacado — mesmo que ' +
-      'você saiba a política. Quem fecha condição especial é a pessoa, não você.',
+    // V1 já foi "avise SEMPRE que pedirem desconto, quem fecha é a pessoa". Foi
+    // escrita quando nenhum desconto era cadastrado, e passou a atropelar o
+    // caso em que o bot PODE aplicar: medido cinco vezes seguidas, o cliente
+    // mencionava o cartão impresso, o prompt dizia em letras maiúsculas para
+    // chamar `aplicar_desconto`, e o bot respondia "vou confirmar com a
+    // responsável" — obedecendo esta regra, que vinha depois e numerada.
+    'V1. Avise quando o cliente pedir desconto que NÃO esteja cadastrado — é o caso do pedido ' +
+      'grande, combinado caso a caso. Mas se `aplicar_desconto` aceita o desconto, então ele é ' +
+      'cadastrado e o caso é APLICAR, não avisar: aí você não chama esta ferramenta.',
     'V2. Avise quando houver horário de entrega ou de atendimento a confirmar.',
     'V3. Avise quando perguntarem de um lugar, prazo ou condição que NÃO está nos documentos, ' +
       'em vez de afirmar por conta própria. Na dúvida, avise.',
@@ -203,7 +210,12 @@ export function regrasDoPedido(): string {
  * de dizer algo que não está aqui, a discrepância fica visível na cara do
  * modelo e o caminho para gravar é a ferramenta.
  */
-export function pedidoAtualParaOPrompt(resumoDoPedido: string, falta: string[]): string {
+export function pedidoAtualParaOPrompt(
+  resumoDoPedido: string,
+  falta: string[],
+  /** Aviso de desconto a que o cliente já tem direito. Ver `descontoAplicavel`. */
+  descontoDisponivel?: string,
+): string {
   return [
     'PEDIDO ATUAL (lido do banco agora, nesta mensagem):',
     resumoDoPedido,
@@ -216,6 +228,7 @@ export function pedidoAtualParaOPrompt(resumoDoPedido: string, falta: string[]):
       'anterior.',
     'Se o cliente disse nesta mensagem algo que NÃO aparece como gravado aqui, é porque ainda ' +
       'não está: chame a ferramenta para gravar ANTES de responder.',
+    ...(descontoDisponivel ? ['', descontoDisponivel] : []),
   ].join('\n');
 }
 
@@ -232,8 +245,13 @@ export function montarPromptDoSistema(
 
   if (agenda) partes.push(agenda);
   if (pedido) partes.push(pedido);
-  if (pedidoAtual) partes.push(pedidoAtual);
   if (aviso) partes.push(aviso);
+
+  // O estado do pedido vai por ÚLTIMO, depois de todas as regras fixas. É a
+  // única parte que muda a cada mensagem, e ficar antes das regras custou caro:
+  // o aviso de "aplique o desconto cadastrado" vinha antes do bloco de avisar o
+  // responsável, e o modelo seguia o bloco de baixo.
+  if (pedidoAtual) partes.push(pedidoAtual);
 
   if (resumo && resumo.trim().length > 0) {
     partes.push(
