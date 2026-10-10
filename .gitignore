@@ -17,3 +17,28 @@ logs/conversas/
 # Artefatos de inspeção do navegador
 .playwright-mcp/
 *.png
+
+# Arquivos de FERRAMENTA e de SESSAO, nao do projeto.
+#
+# Saem do git por decisao do dono: quem clonar o repositorio precisa do codigo,
+# dos documentos dos clientes e do historico de avaliacao -- nao do estado de
+# quem estava trabalhando nele. Os arquivos continuam no disco; so param de ser
+# versionados.
+#
+# `PROGRESSO.md` e `logs/` NAO entram aqui de proposito: o primeiro e a historia
+# do projeto com o porque de cada decisao, e o segundo e a medicao que permite
+# calibrar. Os dois sao do projeto, nao da sessao.
+SESSAO.md
+PLANO-PEDIDO.md
+.claude/
+*.bundle
+
+# Rascunhos de diagnostico: scripts de uma vez, feitos para rodar uma conversa
+# ou imprimir um prompt e serem apagados em seguida. Ignorados para que um
+# esquecimento nunca vire commit.
+replay-temp.ts
+diag-temp.ts
+chunk-temp.ts
+painel-temp.ts
+prompt-atual.txt
+
