@@ -389,6 +389,27 @@ aqui.
 A avaliação roda com `semPersistir`, então não cria conversas nem dispara
 handoffs de verdade: avaliar não pode encher a fila da equipe.
 
+### Expectativa cobra comportamento, não palavra
+
+Quatro perguntas da suíte já falharam com o bot **respondendo certo**, e o
+padrão é sempre o mesmo: `deveConter` e `naoPodeConter` comparam substring, e
+substring não sobrevive a uma reescrita.
+
+| expectativa | resposta correta que ela acusou |
+|---|---|
+| `deveConter: ["pix"]` | *"Aceitamos sim, e também dinheiro e cartão"* |
+| `deveConter: ["desconto"]` | *"pelo cartão a condição já fica aplicada"* |
+| `naoPodeConter: ["chave é"]` | *"quem envia a chave é a responsável"* |
+| `naoPodeConter: ["entregamos em Dourados"]` | *"não entregamos em Dourados"* |
+
+As duas últimas são o caso mais traiçoeiro: a frase proibida aparece **dentro**
+da frase certa, com uma negação na frente.
+
+Regra prática: escreva a expectativa sobre o que a resposta precisa **fazer**
+(confirmar, negar, delegar, não citar valor), não sobre as palavras que você
+imagina que ela vai usar. E quando a suíte acusar, leia a resposta antes de
+mexer no código — metade das vezes o errado é a expectativa.
+
 ### Estabilidade: por que acurácia sozinha engana
 
 95% acertando sempre as mesmas perguntas é uma coisa; 95% sorteando quais é

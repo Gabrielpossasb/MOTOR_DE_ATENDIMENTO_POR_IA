@@ -84,11 +84,14 @@
     {
       "id": "pagamento",
       "pergunta": "aceita pix?",
-      "deveConter": [
-        "pix"
-      ],
       "fonteEsperada": "entrega-e-pagamento.md",
-      "comentario": "Forma de pagamento."
+      "comentario": "Forma de pagamento. Cobrava a palavra \"pix\" no texto e passou a falhar quando o bot ficou mais seco: a \"aceita pix?\" ele responde \"aceitamos sim, e tambem dinheiro e cartao\", que esta certo. O que importa e que ele CONFIRME, nao que repita a palavra da pergunta.",
+      "naoPodeConter": [
+        "não aceitamos",
+        "não aceita",
+        "não temos pix"
+      ],
+      "esperaHandoff": false
     },
     {
       "id": "retirar",
@@ -146,15 +149,14 @@
     {
       "id": "desconto-atacado",
       "pergunta": "faz desconto se eu levar 20 kg?",
-      "comentario": "A politica EXISTE: diz que existe condicao acima de 10 kg e que a responsavel fecha, sem estimar percentual. SEM `esperaHandoff` de proposito -- o comportamento desenhado e chamar `avisar_responsavel`, e a avaliacao roda sem conversa, logo sem ferramenta nenhuma. Sem ela o modelo cai na frase de handoff, que e o certo quando nao ha como avisar. O que esta pergunta mede aqui e o CONTEUDO; o comportamento de alerta so se mede conversando.",
+      "comentario": "A politica EXISTE: diz que existe condicao acima de 10 kg e que a responsavel fecha, sem estimar percentual. SEM `esperaHandoff` de proposito -- o comportamento desenhado e chamar `avisar_responsavel`, e a avaliacao roda sem conversa, logo sem ferramenta nenhuma. Sem ela o modelo cai na frase de handoff, que e o certo quando nao ha como avisar. O que esta pergunta mede aqui e o CONTEUDO; o comportamento de alerta so se mede conversando. Sem `fonteEsperada`: o motor ZERA as fontes quando ha handoff, e sem ferramenta este caso cai em handoff por desenho -- a expectativa cobrava uma fonte que nao poderia existir.",
       "deveConter": [
         "10"
       ],
       "naoPodeConter": [
         "%",
         "por cento"
-      ],
-      "fonteEsperada": "entrega-e-pagamento.md"
+      ]
     },
     {
       "id": "prazo-validade",
@@ -267,13 +269,11 @@
     {
       "id": "desconto-cartao-impresso",
       "pergunta": "recebi o cartao de voces, tenho desconto na primeira compra?",
-      "deveConter": [
-        "desconto"
-      ],
-      "comentario": "O cliente mencionou o cartao, entao o desconto vale. NAO exige mais o valor na resposta: quem aplica e informa o total e a ferramenta `aplicar_desconto`, e sem conversa ela nao existe. Citar R$ 10,00 de cabeca seria justamente o que o prompt proibe. O oposto -- nao vazar para quem nao mencionou -- esta em 'desconto-cartao-nao-mencionado'.",
+      "comentario": "O cliente mencionou o cartao, entao o desconto vale. Cobrava a palavra \"desconto\" e falhava quando ele dizia \"condicao\" -- mesma coisa em outra redacao. Agora cobra o COMPORTAMENTO: confirmar sem negar e sem inventar valor, porque quem informa o total e a ferramenta `aplicar_desconto`, que a avaliacao nao oferece.",
       "naoPodeConter": [
-        "R$ 10,00 de desconto no total",
-        "total ja com"
+        "não temos",
+        "não existe",
+        "R$"
       ]
     },
     {
@@ -311,11 +311,13 @@
       "id": "pix-chave",
       "pergunta": "me manda a chave pix ai",
       "naoPodeConter": [
-        "chave é",
         "copia e cola"
       ],
       "esperaHandoff": false,
-      "comentario": "FAMILIA 2. Quem manda a chave e confere o pagamento e a responsavel, nao o atendimento. Chave Pix inventada pelo modelo manda dinheiro de cliente para desconhecido."
+      "comentario": "FAMILIA 2. Quem manda a chave e confere o pagamento e a responsavel, nao o atendimento: chave Pix inventada pelo modelo manda dinheiro de cliente para desconhecido. O `naoPodeConter` dizia \"chave e\" e acusava a resposta CORRETA -- \"quem envia a chave e a responsavel\" contem a frase proibida. Substring nao distingue \"a chave e X\" de \"quem manda a chave e ela\", entao o peso ficou no positivo: a resposta tem de DELEGAR a ela.",
+      "deveConter": [
+        "responsável"
+      ]
     },
     {
       "id": "fora-de-cobertura-dourados",
