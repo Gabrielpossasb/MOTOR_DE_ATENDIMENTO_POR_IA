@@ -18,6 +18,10 @@ logs/conversas/
 .playwright-mcp/
 *.png
 
+# As capturas do README são do projeto, e precisam ir no repositório: sem elas
+# o README mostra quadrado quebrado para quem abre no GitHub.
+!docs/*.png
+
 # Arquivos de FERRAMENTA e de SESSAO, nao do projeto.
 #
 # Saem do git por decisao do dono: quem clonar o repositorio precisa do codigo,
