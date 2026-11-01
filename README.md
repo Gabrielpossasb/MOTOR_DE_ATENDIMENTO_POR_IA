@@ -11,15 +11,20 @@ isolado numa borda substituível.
 ![Vitest](https://img.shields.io/badge/Vitest-3.1-6E9F18?logo=vitest&logoColor=white)
 ![Testes](https://img.shields.io/badge/testes%20offline-530-success)
 
-<p align="center">
-  <img src="docs/conversa.png" width="30%" alt="Conversa no formato de celular: o bot informa o preço da limpeza citando a fonte, o custo e o score da busca; duas mensagens seguidas do cliente são respondidas num turno só; antes de gravar, ele repete os dados e pede confirmação" />
-</p>
-
-<p align="center">
-  <img src="docs/agenda.png" width="32%" alt="Agenda da recepção com o formulário de marcar e a consulta que o bot acabou de agendar na lista de próximos" />
-  <img src="docs/painel.png" width="32%" alt="Painel com taxa de resolução, custo acumulado, lembretes na fila, avisos para o dono e a lista de handoffs a revisar" />
-  <img src="docs/testes.png" width="32%" alt="Bateria de testes com as perguntas do avaliacao.json, o custo estimado para rodar todas e os filtros por tipo de pergunta" />
-</p>
+<table>
+  <tr>
+    <td valign="top">
+      <img src="docs/conversa.png" width="300" alt="Conversa no formato de celular: o bot informa o preço da limpeza citando a fonte, o custo e o score da busca; duas mensagens seguidas do cliente são respondidas num turno só; antes de gravar, ele repete os dados e pede confirmação" />
+    </td>
+    <td valign="top">
+      <img src="docs/agenda.png" width="466" alt="Agenda da recepção com o formulário de marcar e a consulta que o bot acabou de agendar na lista de próximos" />
+      <br />
+      <img src="docs/painel.png" width="466" alt="Painel com taxa de resolução, custo acumulado, lembretes na fila, avisos para o dono e a lista de handoffs a revisar" />
+      <br />
+      <img src="docs/testes.png" width="466" alt="Bateria de testes com as perguntas do avaliacao.json, o custo estimado para rodar todas e os filtros por tipo de pergunta" />
+    </td>
+  </tr>
+</table>
 
 ## O que é
 
